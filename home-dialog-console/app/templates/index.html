@@ -35,8 +35,8 @@
           <dd>OK: {{ diagnostics["summary"]["ok"] }}, ошибок: {{ diagnostics["summary"]["failed"] }}, не проверялось: {{ diagnostics["summary"].get("not_checked", diagnostics["summary"].get("not_configured_or_disabled", 0)) }}, всего: {{ diagnostics["summary"]["total"] }}</dd>
         </div>
         <div>
-          <dt>Инциденты / рекомендации</dt>
-          <dd>{{ diagnostics["summary"].get("incidents", 0) }} / {{ diagnostics["summary"].get("recommendations", 0) }}</dd>
+          <dt>Инциденты / рекомендации / блокировки</dt>
+          <dd>{{ diagnostics["summary"].get("incidents", 0) }} / {{ diagnostics["summary"].get("recommendations", 0) }} / {{ diagnostics["summary"].get("action_blocks", 0) }}</dd>
         </div>
       </dl>
     </section>
@@ -44,7 +44,7 @@
     {% if incidents %}
     <section class="card wide bad">
       <div class="card-header">
-        <h2>Последние ошибки и блокировки</h2>
+        <h2>Последние ошибки</h2>
         <span class="badge">{{ incidents|length }}</span>
       </div>
       <div class="compact-list">
@@ -52,6 +52,23 @@
         <div class="compact-row">
           <strong>{{ incident.get('title', incident.get('id', 'incident')) }}</strong>
           <span>{{ incident.get('message', '') }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    {% if action_blocks %}
+    <section class="card wide neutral">
+      <div class="card-header">
+        <h2>Последние блокировки действий</h2>
+        <span class="badge">{{ action_blocks|length }}</span>
+      </div>
+      <div class="compact-list">
+        {% for block in action_blocks %}
+        <div class="compact-row">
+          <strong>{{ block.get('title', block.get('id', 'action_block')) }}</strong>
+          <span>{{ block.get('message', '') }}{% if block.get('requested_by') %} · {{ block.get('requested_by') }}{% endif %}{% if block.get('created_at') %} · {{ block.get('created_at') }}{% endif %}</span>
         </div>
         {% endfor %}
       </div>
