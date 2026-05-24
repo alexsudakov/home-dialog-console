@@ -14,35 +14,65 @@
         <h1>Диагностика</h1>
         <p class="muted">Первый экран HDC показывает, что работает, что недоступно и куда смотреть дальше.</p>
       </div>
-      <div class="version">v{{ diagnostics["version"] }}</div>
+      <div class="version">HDC v{{ diagnostics.get("hdc_version", diagnostics["version"]) }}</div>
+    </section>
+
+    <section class="card wide">
+      <div class="card-header">
+        <h2>Сводка</h2>
+        <span class="badge">{{ diagnostics["status"] }}</span>
+      </div>
+      <dl>
+        <div>
+          <dt>Сервис</dt>
+          <dd>{{ diagnostics["service"] }}</dd>
+        </div>
+        <div>
+          <dt>Окружение</dt>
+          <dd>{{ diagnostics["env"] }}</dd>
+        </div>
+        <div>
+          <dt>Версия backend</dt>
+          <dd>{{ diagnostics["version"] }}</dd>
+        </div>
+        <div>
+          <dt>Проверки</dt>
+          <dd>OK: {{ diagnostics["summary"]["ok"] }}, ошибок: {{ diagnostics["summary"]["failed"] }}, не проверялось: {{ diagnostics["summary"].get("not_checked", diagnostics["summary"].get("not_configured_or_disabled", 0)) }}, всего: {{ diagnostics["summary"]["total"] }}</dd>
+        </div>
+      </dl>
     </section>
 
     <section class="summary-grid">
       {% for check in checks %}
-      <article class="card {{ 'ok' if check['ok'] else 'bad' }}">
+      {% set state_class = 'ok' if check['ok'] == true else ('bad' if check['ok'] == false else 'neutral') %}
+      <article class="card {{ state_class }}">
         <div class="card-header">
-          <h2>{{ check['name'] }}</h2>
-          <span class="badge">{{ 'OK' if check['ok'] else 'ERROR' }}</span>
+          <h2>{{ check['title'] }}</h2>
+          <span class="badge">{{ check['status'] }}</span>
         </div>
         <dl>
           <div>
-            <dt>Адрес</dt>
-            <dd>{{ check['url'] }}</dd>
+            <dt>ID</dt>
+            <dd>{{ check['id'] }}</dd>
           </div>
           <div>
-            <dt>HTTP</dt>
-            <dd>{{ check['status_code'] if check['status_code'] else 'нет ответа' }}</dd>
-          </div>
-          <div>
-            <dt>Время</dt>
-            <dd>{{ check['elapsed_ms'] }} ms</dd>
+            <dt>Результат</dt>
+            <dd>
+              {% if check['ok'] == true %}
+                OK
+              {% elif check['ok'] == false %}
+                ERROR
+              {% else %}
+                не проверялось
+              {% endif %}
+            </dd>
           </div>
         </dl>
-        {% if check['error'] %}
-        <p class="error">{{ check['error'] }}</p>
+        {% if check['message'] %}
+        <p class="error">{{ check['message'] }}</p>
         {% endif %}
-        {% if check['data'] %}
-        <pre>{{ check['data'] }}</pre>
+        {% if check['details'] %}
+        <pre>{{ check['details'] }}</pre>
         {% endif %}
       </article>
       {% endfor %}
