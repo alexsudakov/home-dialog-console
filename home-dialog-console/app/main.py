@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.1"
+APP_VERSION = "0.1.2"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 
@@ -48,7 +48,7 @@ def public_options(options: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-async def check_http_json(name: str, url: str, timeout: float = 3.0) -> dict[str, Any]:
+async def check_http_json(name: str, url: str, timeout: float = 5.0) -> dict[str, Any]:
     started = time.perf_counter()
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -79,7 +79,7 @@ async def check_http_json(name: str, url: str, timeout: float = 3.0) -> dict[str
             "elapsed_ms": elapsed_ms,
             "url": url,
             "data": None,
-            "error": str(exc),
+            "error": f"{type(exc).__name__}: {exc or 'no details'}",
         }
 
 
