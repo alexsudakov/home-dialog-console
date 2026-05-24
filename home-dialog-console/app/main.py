@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.1.1"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 
@@ -124,10 +124,11 @@ async def diagnostics_summary() -> JSONResponse:
 async def index(request: Request) -> HTMLResponse:
     diagnostics = await build_diagnostics()
     return templates.TemplateResponse(
+        request,
         "index.html",
         {
-            "request": request,
             "diagnostics": diagnostics,
             "checks": diagnostics["checks"],
+            "options": diagnostics["options"],
         },
     )
