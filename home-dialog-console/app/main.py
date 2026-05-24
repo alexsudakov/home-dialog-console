@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.5"
+APP_VERSION = "0.1.6"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 BASE_DIR = Path(__file__).resolve().parent
@@ -80,8 +80,10 @@ def fallback_summary(options: dict[str, Any], url: str, status_code: int | None,
         "service": "home-dialog-console",
         "env": "local",
         "version": APP_VERSION,
-        "summary": {"total": 2, "ok": 1, "failed": 1, "not_checked": 0},
+        "summary": {"total": 2, "ok": 1, "failed": 1, "not_checked": 0, "incidents": 1, "recommendations": 1},
         "options": public_options(options),
+        "incidents": [{"id": "dialog_service_unavailable", "title": "dialog-service", "severity": "error", "message": error}],
+        "recommendations": [{"id": "dialog_service_unavailable", "title": "dialog-service", "text": "Проверить доступность dialog-service URL из настроек HDC."}],
         "checks": [
             hdc_check(),
             {
@@ -114,6 +116,8 @@ async def build_diagnostics() -> dict[str, Any]:
             "dialog_service_url": dialog_service_url,
             "options": public_options(options),
             "summary": summary,
+            "incidents": payload.get("incidents") or [],
+            "recommendations": payload.get("recommendations") or [],
             "checks": checks,
         }
 
@@ -139,6 +143,8 @@ async def index(request: Request) -> HTMLResponse:
         {
             "diagnostics": diagnostics,
             "checks": diagnostics["checks"],
+            "incidents": diagnostics.get("incidents") or [],
+            "recommendations": diagnostics.get("recommendations") or [],
             "options": diagnostics["options"],
         },
     )
