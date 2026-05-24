@@ -7,6 +7,7 @@
   --muted: #9ca3af;
   --ok: #22c55e;
   --bad: #ef4444;
+  --neutral: #f59e0b;
   --border: rgba(255, 255, 255, 0.12);
 }
 
@@ -92,6 +93,10 @@ h2 {
   border-color: rgba(239, 68, 68, 0.45);
 }
 
+.card.neutral {
+  border-color: rgba(245, 158, 11, 0.45);
+}
+
 .card.wide {
   margin-top: 16px;
 }
@@ -120,6 +125,11 @@ h2 {
 .bad .badge {
   color: var(--bad);
   border-color: rgba(239, 68, 68, 0.5);
+}
+
+.neutral .badge {
+  color: var(--neutral);
+  border-color: rgba(245, 158, 11, 0.5);
 }
 
 dl {
@@ -156,6 +166,8 @@ pre {
   background: var(--panel-soft);
   color: var(--muted);
   font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
 }
 
 @media (max-width: 640px) {
