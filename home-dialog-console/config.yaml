@@ -1,0 +1,36 @@
+name: Home Dialog Console
+version: "0.1.0"
+slug: home_dialog_console
+description: Diagnostic and control console for a local dialog-service
+url: "https://github.com/alexsudakov/home-dialog-console"
+
+arch:
+  - amd64
+
+startup: application
+boot: auto
+init: false
+
+webui: "http://[HOST]:[PORT:8099]"
+ingress: true
+ingress_port: 8099
+panel_title: Home Dialog Console
+panel_icon: mdi:home-analytics
+panel_admin: true
+
+homeassistant_api: true
+hassio_api: true
+hassio_role: default
+
+options:
+  dialog_service_url: "http://127.0.0.1:8090"
+  log_level: "info"
+
+schema:
+  dialog_service_url: str
+  log_level: list(debug|info|warning|error)
+
+ports:
+  8099/tcp: null
+
+watchdog: "http://[HOST]:[PORT:8099]/health"
