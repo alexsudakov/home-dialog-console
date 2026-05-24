@@ -72,7 +72,7 @@
         <p class="error">{{ check['message'] }}</p>
         {% endif %}
         {% if check['details'] %}
-        <pre>{{ check['details'] }}</pre>
+        <pre>{{ check['details'] | tojson(indent=2) }}</pre>
         {% endif %}
       </article>
       {% endfor %}
