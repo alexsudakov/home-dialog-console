@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Home Dialog Console</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Home Dialog Console</p>
+        <h1>Диагностика</h1>
+        <p class="muted">Первый экран HDC показывает, что работает, что недоступно и куда смотреть дальше.</p>
+      </div>
+      <div class="version">v{{ diagnostics.version }}</div>
+    </section>
+
+    <section class="summary-grid">
+      {% for check in checks %}
+      <article class="card {{ 'ok' if check.ok else 'bad' }}">
+        <div class="card-header">
+          <h2>{{ check.name }}</h2>
+          <span class="badge">{{ 'OK' if check.ok else 'ERROR' }}</span>
+        </div>
+        <dl>
+          <div>
+            <dt>Адрес</dt>
+            <dd>{{ check.url }}</dd>
+          </div>
+          <div>
+            <dt>HTTP</dt>
+            <dd>{{ check.status_code if check.status_code else 'нет ответа' }}</dd>
+          </div>
+          <div>
+            <dt>Время</dt>
+            <dd>{{ check.elapsed_ms }} ms</dd>
+          </div>
+        </dl>
+        {% if check.error %}
+        <p class="error">{{ check.error }}</p>
+        {% endif %}
+        {% if check.data %}
+        <pre>{{ check.data }}</pre>
+        {% endif %}
+      </article>
+      {% endfor %}
+    </section>
+
+    <section class="card wide">
+      <h2>Настройки</h2>
+      <dl>
+        <div>
+          <dt>dialog-service</dt>
+          <dd>{{ diagnostics.options.dialog_service_url }}</dd>
+        </div>
+        <div>
+          <dt>Уровень логов</dt>
+          <dd>{{ diagnostics.options.log_level }}</dd>
+        </div>
+      </dl>
+    </section>
+  </main>
+</body>
+</html>
