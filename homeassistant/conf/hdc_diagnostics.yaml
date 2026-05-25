@@ -9,7 +9,7 @@
 #   http://192.168.1.111:8090/admin/diagnostics/summary
 #
 # Размещение в рабочем Home Assistant:
-#   /config/hdc_diagnostics.yaml
+#   /config/conf/hdc_diagnostics.yaml
 #
 # Важно:
 #   sensor.hdc_diagnostics хранит полный диагностический JSON в атрибутах.
@@ -140,9 +140,16 @@ template:
           {{ ns.value }}
 
   - binary_sensor:
+      - name: "HDC System Problem"
+        unique_id: hdc_system_problem
+        device_class: problem
+        icon: mdi:alert-circle-outline
+        state: >
+          {% set summary = state_attr('sensor.hdc_diagnostics', 'summary') or {} %}
+          {{ (summary.get('failed', 0) | int(0)) > 0 or (summary.get('incidents', 0) | int(0)) > 0 }}
+
       - name: "HDC System Healthy"
         unique_id: hdc_system_healthy
-        device_class: problem
         icon: mdi:heart-pulse
         state: >
           {% set summary = state_attr('sensor.hdc_diagnostics', 'summary') or {} %}
