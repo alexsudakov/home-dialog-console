@@ -95,13 +95,12 @@
           <dl class="info-list">
             <div><dt>Возраст</dt><dd>{{ view.snapshot.age }}</dd></div>
             <div><dt>Обновлён</dt><dd>{{ view.snapshot.updated_at }}</dd></div>
-            <div><dt>Файл</dt><dd>{{ view.snapshot.path }}</dd></div>
           </dl>
         </article>
       </section>
 
       <section class="two-column">
-        <article class="panel">
+        <article class="panel compact-panel">
           <div class="panel-header">
             <h2>Последние ошибки</h2>
             <span class="counter">{{ view.incidents|length }}</span>
@@ -120,7 +119,7 @@
           {% endif %}
         </article>
 
-        <article class="panel">
+        <article class="panel compact-panel">
           <div class="panel-header">
             <h2>Последние блокировки действий</h2>
             <span class="counter">{{ view.action_blocks|length }}</span>
@@ -140,7 +139,7 @@
         </article>
       </section>
 
-      <section class="panel">
+      <section class="panel compact-panel">
         <div class="panel-header">
           <h2>Что делать дальше</h2>
           <span class="counter">{{ view.recommendations|length }}</span>
@@ -190,19 +189,12 @@
         </div>
       </section>
 
-      <section class="panel settings-panel">
-        <div class="panel-header">
-          <h2>Настройки подключения</h2>
-          <span class="small-muted">read-only</span>
-        </div>
-        <dl class="info-list">
+      <details class="raw-details">
+        <summary>Подробные проверки JSON и настройки подключения</summary>
+        <dl class="info-list raw-options">
           <div><dt>dialog-service</dt><dd>{{ options["dialog_service_url"] }}</dd></div>
           <div><dt>Уровень логов</dt><dd>{{ options["log_level"] }}</dd></div>
         </dl>
-      </section>
-
-      <details class="raw-details">
-        <summary>Подробные проверки JSON</summary>
         <pre>{{ view.raw | tojson(indent=2) }}</pre>
       </details>
     </main>
