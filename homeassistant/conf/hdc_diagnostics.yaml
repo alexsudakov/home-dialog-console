@@ -1,0 +1,268 @@
+# HDC Diagnostics for Home Assistant
+#
+# Назначение:
+#   Получает /admin/diagnostics/summary из dialog-service и создаёт
+#   стандартные HA-сущности для первого диагностического dashboard.
+#
+# Источник данных:
+#   dialog-service на CT101
+#   http://192.168.1.111:8090/admin/diagnostics/summary
+#
+# Размещение в рабочем Home Assistant:
+#   /config/hdc_diagnostics.yaml
+#
+# Важно:
+#   sensor.hdc_diagnostics хранит полный диагностический JSON в атрибутах.
+#   Если Home Assistant начнёт предупреждать о слишком больших атрибутах,
+#   нужно добавить compact endpoint в dialog-service и переключить resource на него.
+
+rest:
+  - resource: "http://192.168.1.111:8090/admin/diagnostics/summary"
+    scan_interval: 60
+    timeout: 10
+    sensor:
+      - name: "HDC Diagnostics"
+        unique_id: hdc_diagnostics
+        value_template: "{{ value_json.status | default('unknown') }}"
+        json_attributes:
+          - generated_at
+          - service
+          - env
+          - version
+          - summary
+          - checks
+          - incidents
+          - recommendations
+          - action_blocks
+
+template:
+  - sensor:
+      - name: "HDC Backend Version"
+        unique_id: hdc_backend_version
+        icon: mdi:package-variant-closed
+        state: >
+          {{ state_attr('sensor.hdc_diagnostics', 'version') | default('unknown', true) }}
+
+      - name: "HDC Generated At"
+        unique_id: hdc_generated_at
+        icon: mdi:clock-outline
+        state: >
+          {{ state_attr('sensor.hdc_diagnostics', 'generated_at') | default('unknown', true) }}
+
+      - name: "HDC Checks Total"
+        unique_id: hdc_checks_total
+        icon: mdi:counter
+        state: >
+          {% set summary = state_attr('sensor.hdc_diagnostics', 'summary') or {} %}
+          {{ summary.get('total', 0) | int(0) }}
+
+      - name: "HDC Checks OK"
+        unique_id: hdc_checks_ok
+        icon: mdi:check-circle-outline
+        state: >
+          {% set summary = state_attr('sensor.hdc_diagnostics', 'summary') or {} %}
+          {{ summary.get('ok', 0) | int(0) }}
+
+      - name: "HDC Checks Failed"
+        unique_id: hdc_checks_failed
+        icon: mdi:alert-circle-outline
+        state: >
+          {% set summary = state_attr('sensor.hdc_diagnostics', 'summary') or {} %}
+          {{ summary.get('failed', 0) | int(0) }}
+
+      - name: "HDC Checks Not Checked"
+        unique_id: hdc_checks_not_checked
+        icon: mdi:help-circle-outline
+        state: >
+          {% set summary = state_attr('sensor.hdc_diagnostics', 'summary') or {} %}
+          {{ summary.get('not_checked', 0) | int(0) }}
+
+      - name: "HDC Incidents Count"
+        unique_id: hdc_incidents_count
+        icon: mdi:alert-outline
+        state: >
+          {% set summary = state_attr('sensor.hdc_diagnostics', 'summary') or {} %}
+          {{ summary.get('incidents', 0) | int(0) }}
+
+      - name: "HDC Recommendations Count"
+        unique_id: hdc_recommendations_count
+        icon: mdi:lightbulb-on-outline
+        state: >
+          {% set summary = state_attr('sensor.hdc_diagnostics', 'summary') or {} %}
+          {{ summary.get('recommendations', 0) | int(0) }}
+
+      - name: "HDC Action Blocks Count"
+        unique_id: hdc_action_blocks_count
+        icon: mdi:shield-lock-outline
+        state: >
+          {% set summary = state_attr('sensor.hdc_diagnostics', 'summary') or {} %}
+          {{ summary.get('action_blocks', 0) | int(0) }}
+
+      - name: "HDC Availability Percent"
+        unique_id: hdc_availability_percent
+        icon: mdi:percent-outline
+        unit_of_measurement: "%"
+        state: >
+          {% set summary = state_attr('sensor.hdc_diagnostics', 'summary') or {} %}
+          {% set total = summary.get('total', 0) | int(0) %}
+          {% set ok = summary.get('ok', 0) | int(0) %}
+          {% if total > 0 %}
+            {{ ((ok / total) * 100) | round(2) }}
+          {% else %}
+            0
+          {% endif %}
+
+      - name: "HDC Snapshot Age Sec"
+        unique_id: hdc_snapshot_age_sec
+        icon: mdi:timer-outline
+        unit_of_measurement: "s"
+        state: >
+          {% set checks = state_attr('sensor.hdc_diagnostics', 'checks') or [] %}
+          {% set ns = namespace(value=0) %}
+          {% for check in checks %}
+            {% if check.get('id') == 'system_runtime_snapshot' %}
+              {% set ns.value = (check.get('details', {}).get('age_sec', 0) | int(0)) %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.value }}
+
+      - name: "HDC Snapshot Updated At"
+        unique_id: hdc_snapshot_updated_at
+        icon: mdi:clock-check-outline
+        state: >
+          {% set checks = state_attr('sensor.hdc_diagnostics', 'checks') or [] %}
+          {% set ns = namespace(value='unknown') %}
+          {% for check in checks %}
+            {% if check.get('id') == 'system_runtime_snapshot' %}
+              {% set ns.value = check.get('details', {}).get('updated_at', 'unknown') %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.value }}
+
+  - binary_sensor:
+      - name: "HDC System Healthy"
+        unique_id: hdc_system_healthy
+        device_class: problem
+        icon: mdi:heart-pulse
+        state: >
+          {% set summary = state_attr('sensor.hdc_diagnostics', 'summary') or {} %}
+          {{ not ((summary.get('failed', 0) | int(0)) > 0 or (summary.get('incidents', 0) | int(0)) > 0) }}
+
+      - name: "HDC Dialog Service OK"
+        unique_id: hdc_dialog_service_ok
+        device_class: connectivity
+        state: >
+          {% set checks = state_attr('sensor.hdc_diagnostics', 'checks') or [] %}
+          {% set ns = namespace(ok=false) %}
+          {% for check in checks %}
+            {% if check.get('id') == 'dialog_service' %}
+              {% set ns.ok = check.get('ok') == true %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.ok }}
+
+      - name: "HDC Planner OK"
+        unique_id: hdc_planner_ok
+        device_class: connectivity
+        state: >
+          {% set checks = state_attr('sensor.hdc_diagnostics', 'checks') or [] %}
+          {% set ns = namespace(ok=false) %}
+          {% for check in checks %}
+            {% if check.get('id') == 'planner_llama' %}
+              {% set ns.ok = check.get('ok') == true %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.ok }}
+
+      - name: "HDC Redis OK"
+        unique_id: hdc_redis_ok
+        device_class: connectivity
+        state: >
+          {% set checks = state_attr('sensor.hdc_diagnostics', 'checks') or [] %}
+          {% set ns = namespace(ok=false) %}
+          {% for check in checks %}
+            {% if check.get('id') == 'redis' %}
+              {% set ns.ok = check.get('ok') == true %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.ok }}
+
+      - name: "HDC Telegram Runner OK"
+        unique_id: hdc_telegram_runner_ok
+        device_class: connectivity
+        state: >
+          {% set checks = state_attr('sensor.hdc_diagnostics', 'checks') or [] %}
+          {% set ns = namespace(ok=false) %}
+          {% for check in checks %}
+            {% if check.get('id') == 'telegram_runner' %}
+              {% set ns.ok = check.get('ok') == true %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.ok }}
+
+      - name: "HDC Home Assistant API OK"
+        unique_id: hdc_home_assistant_api_ok
+        device_class: connectivity
+        state: >
+          {% set checks = state_attr('sensor.hdc_diagnostics', 'checks') or [] %}
+          {% set ns = namespace(ok=false) %}
+          {% for check in checks %}
+            {% if check.get('id') == 'ha_api' %}
+              {% set ns.ok = check.get('ok') == true %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.ok }}
+
+      - name: "HDC Source Selector OK"
+        unique_id: hdc_source_selector_ok
+        device_class: connectivity
+        state: >
+          {% set checks = state_attr('sensor.hdc_diagnostics', 'checks') or [] %}
+          {% set ns = namespace(ok=false) %}
+          {% for check in checks %}
+            {% if check.get('id') == 'source_selector' %}
+              {% set ns.ok = check.get('ok') == true %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.ok }}
+
+      - name: "HDC Qdrant OK"
+        unique_id: hdc_qdrant_ok
+        device_class: connectivity
+        state: >
+          {% set checks = state_attr('sensor.hdc_diagnostics', 'checks') or [] %}
+          {% set ns = namespace(ok=false) %}
+          {% for check in checks %}
+            {% if check.get('id') == 'qdrant' %}
+              {% set ns.ok = check.get('ok') == true %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.ok }}
+
+      - name: "HDC LLM Log Helper OK"
+        unique_id: hdc_llm_log_helper_ok
+        device_class: connectivity
+        state: >
+          {% set checks = state_attr('sensor.hdc_diagnostics', 'checks') or [] %}
+          {% set ns = namespace(ok=false) %}
+          {% for check in checks %}
+            {% if check.get('id') == 'llm_log_helper' %}
+              {% set ns.ok = check.get('ok') == true %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.ok }}
+
+      - name: "HDC Snapshot Fresh"
+        unique_id: hdc_snapshot_fresh
+        device_class: connectivity
+        icon: mdi:clock-check-outline
+        state: >
+          {% set checks = state_attr('sensor.hdc_diagnostics', 'checks') or [] %}
+          {% set ns = namespace(ok=false) %}
+          {% for check in checks %}
+            {% if check.get('id') == 'system_runtime_snapshot' %}
+              {% set age = check.get('details', {}).get('age_sec', 999999) | int(999999) %}
+              {% set ns.ok = check.get('ok') == true and age <= 180 %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.ok }}
