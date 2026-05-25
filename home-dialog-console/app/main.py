@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -12,10 +13,97 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.7"
+APP_VERSION = "0.1.8"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 BASE_DIR = Path(__file__).resolve().parent
+
+SERVICE_CARD_MAP: dict[str, dict[str, str]] = {
+    "dialog_service": {
+        "title": "dialog-service",
+        "icon": "💬",
+        "description": "Основной диалоговый сервис и обработка запросов.",
+    },
+    "planner_llama": {
+        "title": "Planner llama.cpp",
+        "icon": "📋",
+        "description": "Планирование маршрута ответа и выбор действий.",
+    },
+    "redis": {
+        "title": "Redis",
+        "icon": "🧱",
+        "description": "Кэш, очереди и служебное состояние.",
+    },
+    "telegram_runner": {
+        "title": "Telegram runner",
+        "icon": "✈️",
+        "description": "Приём и отправка сообщений Telegram.",
+    },
+    "ha_api": {
+        "title": "HA API",
+        "icon": "🏠",
+        "description": "Доступ к Home Assistant API.",
+    },
+    "source_selector": {
+        "title": "Source Selector",
+        "icon": "🧭",
+        "description": "Выбор нужных источников данных.",
+    },
+    "qdrant": {
+        "title": "Qdrant",
+        "icon": "🧩",
+        "description": "Векторная база для карточек источников.",
+    },
+    "llm_log_helper": {
+        "title": "llm_log_helper",
+        "icon": "📄",
+        "description": "Чтение логов Home Assistant и add-ons.",
+    },
+    "ollama": {
+        "title": "Ollama fallback",
+        "icon": "🧠",
+        "description": "Резервная локальная LLM-служба.",
+    },
+    "config_db": {
+        "title": "Config DB",
+        "icon": "🗄️",
+        "description": "SQLite-настройки, алиасы и журнал действий.",
+    },
+    "action_executor": {
+        "title": "Action Executor",
+        "icon": "⚙️",
+        "description": "Безопасная проверка и выполнение действий.",
+    },
+    "system_runtime_snapshot": {
+        "title": "System Snapshot",
+        "icon": "🕒",
+        "description": "Свежесть снимка runtime-состояния.",
+    },
+}
+
+DEPENDENCY_IDS = [
+    "redis",
+    "ha_api",
+    "telegram_runner",
+    "planner_llama",
+    "source_selector",
+    "qdrant",
+    "llm_log_helper",
+    "ollama",
+]
+
+NAV_ITEMS = [
+    {"title": "Обзор", "href": "/", "active": True},
+    {"title": "Окружение", "href": "#environment", "active": False},
+    {"title": "Qdrant / Source Selector", "href": "#qdrant", "active": False},
+    {"title": "Промты", "href": "#prompts", "active": False},
+    {"title": "Анализаторы", "href": "#analyzers", "active": False},
+    {"title": "Действия FastPath", "href": "#actions", "active": False},
+    {"title": "Объекты и алиасы", "href": "#objects", "active": False},
+    {"title": "База данных", "href": "#database", "active": False},
+    {"title": "Логи", "href": "#logs", "active": False},
+    {"title": "О системе", "href": "#about", "active": False},
+]
 
 app = FastAPI(title="Home Dialog Console", version=APP_VERSION)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
@@ -76,7 +164,7 @@ def fallback_summary(options: dict[str, Any], url: str, status_code: int | None,
     return {
         "ok": False,
         "status": "degraded",
-        "generated_at": int(time.time()),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "service": "home-dialog-console",
         "env": "local",
         "version": APP_VERSION,
@@ -126,6 +214,200 @@ async def build_diagnostics() -> dict[str, Any]:
     return fallback_summary(options, diagnostics_url, status_code, elapsed_ms, error)
 
 
+def parse_dt(value: Any) -> datetime | None:
+    if not value:
+        return None
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(value, tz=timezone.utc)
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    return None
+
+
+def format_dt(value: Any, fallback: str = "нет данных") -> str:
+    dt = parse_dt(value)
+    if not dt:
+        return fallback
+    local_dt = dt.astimezone()
+    return local_dt.strftime("%d.%m.%Y %H:%M:%S")
+
+
+def format_time(value: Any, fallback: str = "нет данных") -> str:
+    dt = parse_dt(value)
+    if not dt:
+        return fallback
+    local_dt = dt.astimezone()
+    return local_dt.strftime("%H:%M:%S")
+
+
+def status_label(check: dict[str, Any]) -> str:
+    if check.get("ok") is True:
+        return "Работает"
+    if check.get("ok") is False:
+        return "Ошибка"
+    status = str(check.get("status") or "")
+    labels = {
+        "disabled": "Отключено",
+        "not_configured": "Не настроено",
+        "not_found": "Не найдено",
+        "stale": "Устарело",
+    }
+    return labels.get(status, "Не проверялось")
+
+
+def state_class(check: dict[str, Any]) -> str:
+    if check.get("ok") is True:
+        return "ok"
+    if check.get("ok") is False:
+        return "bad"
+    status = str(check.get("status") or "")
+    if status == "stale":
+        return "warning"
+    return "neutral"
+
+
+def check_by_id(checks: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    return {str(check.get("id")): check for check in checks}
+
+
+def build_service_cards(checks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_id = check_by_id(checks)
+    cards: list[dict[str, Any]] = []
+    for check_id, meta in SERVICE_CARD_MAP.items():
+        check = by_id.get(check_id)
+        if not check:
+            continue
+        details = check.get("details") or {}
+        elapsed_ms = details.get("elapsed_ms")
+        cards.append({
+            "id": check_id,
+            "title": meta["title"],
+            "icon": meta["icon"],
+            "description": meta["description"],
+            "label": status_label(check),
+            "status": check.get("status") or "unknown",
+            "class": state_class(check),
+            "elapsed_ms": f"{elapsed_ms} мс" if elapsed_ms is not None else "—",
+            "message": check.get("message") or "",
+            "details": details,
+        })
+    return cards
+
+
+def build_summary_tiles(diagnostics: dict[str, Any]) -> list[dict[str, Any]]:
+    summary = diagnostics.get("summary") or {}
+    total = int(summary.get("total") or 0)
+    ok = int(summary.get("ok") or 0)
+    availability = round((ok / total) * 100, 1) if total else 0
+    return [
+        {"label": "Всего проверок", "value": total, "hint": "включая HDC"},
+        {"label": "OK", "value": ok, "hint": "работают штатно"},
+        {"label": "Ошибки", "value": int(summary.get("failed") or 0), "hint": "критичные сбои"},
+        {"label": "Инциденты", "value": int(summary.get("incidents") or 0), "hint": "runtime-ошибки"},
+        {"label": "Рекомендации", "value": int(summary.get("recommendations") or 0), "hint": "что проверить"},
+        {"label": "Блокировки", "value": int(summary.get("action_blocks") or 0), "hint": "защита действий"},
+        {"label": "Доступность", "value": f"{availability}%", "hint": "OK / всего"},
+    ]
+
+
+def build_snapshot(checks: list[dict[str, Any]]) -> dict[str, Any]:
+    check = check_by_id(checks).get("system_runtime_snapshot") or {}
+    details = check.get("details") or {}
+    age = details.get("age_sec")
+    try:
+        age_int = int(age)
+    except Exception:
+        age_int = None
+
+    if check.get("ok") is True and age_int is not None and age_int <= 180:
+        label = "Актуален"
+        css = "ok"
+    elif check.get("ok") is False:
+        label = "Ошибка"
+        css = "bad"
+    else:
+        label = "Устарел или не найден"
+        css = "warning"
+
+    return {
+        "label": label,
+        "class": css,
+        "age": f"{age_int} сек" if age_int is not None else "нет данных",
+        "updated_at": format_dt(details.get("updated_at")),
+        "path": details.get("path") or "—",
+    }
+
+
+def build_dependency_rows(checks: list[dict[str, Any]], recommendations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_id = check_by_id(checks)
+    rec_by_id = {str(item.get("id")): item for item in recommendations}
+    rows: list[dict[str, Any]] = []
+    for check_id in DEPENDENCY_IDS:
+        check = by_id.get(check_id)
+        if not check:
+            continue
+        details = check.get("details") or {}
+        rows.append({
+            "title": SERVICE_CARD_MAP.get(check_id, {}).get("title", check.get("title", check_id)),
+            "label": status_label(check),
+            "class": state_class(check),
+            "elapsed_ms": details.get("elapsed_ms", "—"),
+            "error": check.get("message") or "—",
+            "recommendation": (rec_by_id.get(check_id) or {}).get("text") or "Нет рекомендаций",
+        })
+    return rows
+
+
+def build_view_model(diagnostics: dict[str, Any]) -> dict[str, Any]:
+    checks = diagnostics.get("checks") or []
+    incidents = diagnostics.get("incidents") or []
+    recommendations = diagnostics.get("recommendations") or []
+    status = diagnostics.get("status") or "unknown"
+    summary = diagnostics.get("summary") or {}
+
+    has_problem = bool(summary.get("failed") or summary.get("incidents") or incidents)
+    if status == "ok" and not has_problem:
+        overall = {
+            "class": "ok",
+            "title": "Система работает нормально",
+            "description": "Все ключевые сервисы доступны и функционируют в штатном режиме.",
+            "label": "здорово",
+        }
+    elif status == "degraded":
+        overall = {
+            "class": "warning",
+            "title": "Система работает с предупреждениями",
+            "description": "Есть некритичные проблемы или устаревшие данные, требующие внимания.",
+            "label": "предупреждение",
+        }
+    else:
+        overall = {
+            "class": "bad",
+            "title": "Система работает с ошибками",
+            "description": "Одна или несколько ключевых зависимостей недоступны.",
+            "label": "ошибка",
+        }
+
+    return {
+        "nav_items": NAV_ITEMS,
+        "overall": overall,
+        "updated_at": format_time(diagnostics.get("generated_at")),
+        "updated_at_full": format_dt(diagnostics.get("generated_at")),
+        "service_cards": build_service_cards(checks),
+        "summary_tiles": build_summary_tiles(diagnostics),
+        "snapshot": build_snapshot(checks),
+        "dependency_rows": build_dependency_rows(checks, recommendations),
+        "incidents": incidents,
+        "recommendations": recommendations,
+        "action_blocks": diagnostics.get("action_blocks") or [],
+        "checks": checks,
+        "raw": diagnostics,
+    }
+
+
 @app.get("/health")
 async def health() -> dict[str, Any]:
     return {"status": "ok", "service": "home-dialog-console", "version": APP_VERSION}
@@ -139,15 +421,13 @@ async def diagnostics_summary() -> JSONResponse:
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
     diagnostics = await build_diagnostics()
+    view = build_view_model(diagnostics)
     return templates.TemplateResponse(
         request,
         "index.html",
         {
             "diagnostics": diagnostics,
-            "checks": diagnostics["checks"],
-            "incidents": diagnostics.get("incidents") or [],
-            "recommendations": diagnostics.get("recommendations") or [],
-            "action_blocks": diagnostics.get("action_blocks") or [],
+            "view": view,
             "options": diagnostics["options"],
         },
     )
