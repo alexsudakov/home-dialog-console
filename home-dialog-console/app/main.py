@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.12"
+APP_VERSION = "0.1.13"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 BASE_DIR = Path(__file__).resolve().parent
@@ -59,7 +59,7 @@ DEPENDENCY_IDS = [
 ]
 
 NAV_ITEMS = [
-    {"title": "Обзор", "href": "/", "active": True, "disabled": False},
+    {"title": "Обзор", "href": ".", "active": True, "disabled": False},
     {"title": "Окружение", "href": "#environment", "active": False, "disabled": True},
     {"title": "Qdrant", "href": "#qdrant", "active": False, "disabled": True},
     {"title": "Промты", "href": "#prompts", "active": False, "disabled": True},
