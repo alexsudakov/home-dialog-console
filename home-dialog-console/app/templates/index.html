@@ -8,118 +8,202 @@
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-  <main class="page">
-    <section class="hero">
-      <div>
-        <p class="eyebrow">Home Dialog Console</p>
-        <h1>Диагностика</h1>
-        <p class="muted">Первый экран HDC показывает, что работает, что недоступно и куда смотреть дальше. Страница обновляется автоматически раз в минуту.</p>
-      </div>
-      <div class="hero-actions">
-        <div class="version">HDC v{{ diagnostics.get("hdc_version", diagnostics["version"]) }}</div>
-        <a class="refresh" href="/">Обновить</a>
-      </div>
-    </section>
-
-    <section class="card wide {{ 'ok' if diagnostics['status'] == 'ok' else 'bad' }}">
-      <div class="card-header">
-        <h2>Сводка</h2>
-        <span class="badge">{{ diagnostics["status"] }}</span>
-      </div>
-      <dl>
-        <div><dt>Сервис</dt><dd>{{ diagnostics["service"] }}</dd></div>
-        <div><dt>Окружение</dt><dd>{{ diagnostics["env"] }}</dd></div>
-        <div><dt>Версия backend</dt><dd>{{ diagnostics["version"] }}</dd></div>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">HDC</div>
         <div>
-          <dt>Проверки</dt>
-          <dd>OK: {{ diagnostics["summary"]["ok"] }}, ошибок: {{ diagnostics["summary"]["failed"] }}, не проверялось: {{ diagnostics["summary"].get("not_checked", diagnostics["summary"].get("not_configured_or_disabled", 0)) }}, всего: {{ diagnostics["summary"]["total"] }}</dd>
+          <div class="brand-title">Home Dialog</div>
+          <div class="brand-subtitle">Console</div>
         </div>
+      </div>
+      <nav class="nav">
+        {% for item in view.nav_items %}
+        <a class="nav-item {{ 'active' if item.active else '' }}" href="{{ item.href }}">{{ item.title }}</a>
+        {% endfor %}
+      </nav>
+      <div class="sidebar-footer">
+        <span>HDC v{{ diagnostics.get('hdc_version', diagnostics['version']) }}</span>
+        <span>backend {{ diagnostics['version'] }}</span>
+      </div>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
         <div>
-          <dt>Инциденты / рекомендации / блокировки</dt>
-          <dd>{{ diagnostics["summary"].get("incidents", 0) }} / {{ diagnostics["summary"].get("recommendations", 0) }} / {{ diagnostics["summary"].get("action_blocks", 0) }}</dd>
+          <p class="eyebrow">Home Dialog Console</p>
+          <h1>Диагностика</h1>
+          <p class="muted">Диагностика и мониторинг системы диалогов.</p>
         </div>
-      </dl>
-    </section>
+        <div class="topbar-actions">
+          <div class="updated">Обновлено: <strong>{{ view.updated_at }}</strong></div>
+          <a class="refresh" href="/">Обновить всё</a>
+        </div>
+      </header>
 
-    {% if incidents %}
-    <section class="card wide bad">
-      <div class="card-header">
-        <h2>Последние ошибки</h2>
-        <span class="badge">{{ incidents|length }}</span>
-      </div>
-      <div class="compact-list">
-        {% for incident in incidents %}
-        <div class="compact-row">
-          <strong>{{ incident.get('title', incident.get('id', 'incident')) }}</strong>
-          <span>{{ incident.get('message', '') }}</span>
+      <section class="status-hero {{ view.overall.class }}">
+        <div>
+          <div class="status-kicker">Общее состояние</div>
+          <h2>{{ view.overall.title }}</h2>
+          <p>{{ view.overall.description }}</p>
         </div>
-        {% endfor %}
-      </div>
-    </section>
-    {% endif %}
+        <div class="status-pill">{{ view.overall.label }}</div>
+      </section>
 
-    {% if action_blocks %}
-    <section class="card wide neutral">
-      <div class="card-header">
-        <h2>Последние блокировки действий</h2>
-        <span class="badge">{{ action_blocks|length }}</span>
-      </div>
-      <div class="compact-list">
-        {% for block in action_blocks %}
-        <div class="compact-row">
-          <strong>{{ block.get('title', block.get('id', 'action_block')) }}</strong>
-          <span>{{ block.get('message', '') }}{% if block.get('requested_by') %} · {{ block.get('requested_by') }}{% endif %}{% if block.get('created_at') %} · {{ block.get('created_at') }}{% endif %}</span>
-        </div>
-        {% endfor %}
-      </div>
-    </section>
-    {% endif %}
-
-    {% if recommendations %}
-    <section class="card wide neutral">
-      <div class="card-header">
-        <h2>Что делать дальше</h2>
-        <span class="badge">{{ recommendations|length }}</span>
-      </div>
-      <div class="compact-list">
-        {% for recommendation in recommendations %}
-        <div class="compact-row">
-          <strong>{{ recommendation.get('title', recommendation.get('id', 'recommendation')) }}</strong>
-          <span>{{ recommendation.get('text', '') }}</span>
-        </div>
-        {% endfor %}
-      </div>
-    </section>
-    {% endif %}
-
-    <section class="summary-grid">
-      {% for check in checks %}
-      {% set state_class = 'ok' if check['ok'] == true else ('bad' if check['ok'] == false else 'neutral') %}
-      <article class="card {{ state_class }}">
-        <div class="card-header">
-          <h2>{{ check['title'] }}</h2>
-          <span class="badge">{{ check['status'] }}</span>
-        </div>
-        <dl>
-          <div><dt>ID</dt><dd>{{ check['id'] }}</dd></div>
-          <div>
-            <dt>Результат</dt>
-            <dd>{% if check['ok'] == true %}OK{% elif check['ok'] == false %}ERROR{% else %}не проверялось{% endif %}</dd>
+      <section class="service-grid">
+        {% for card in view.service_cards %}
+        <article class="service-card {{ card.class }}">
+          <div class="service-card-top">
+            <div class="service-icon">{{ card.icon }}</div>
+            <span class="status-badge">{{ card.label }}</span>
           </div>
-        </dl>
-        {% if check['message'] %}<p class="error">{{ check['message'] }}</p>{% endif %}
-        {% if check['details'] %}<pre>{{ check['details'] | tojson(indent=2) }}</pre>{% endif %}
-      </article>
-      {% endfor %}
-    </section>
+          <h3>{{ card.title }}</h3>
+          <p>{{ card.description }}</p>
+          <div class="service-meta">
+            <span>Ответ</span>
+            <strong>{{ card.elapsed_ms }}</strong>
+          </div>
+          {% if card.message %}<div class="service-error">{{ card.message }}</div>{% endif %}
+        </article>
+        {% endfor %}
+      </section>
 
-    <section class="card wide">
-      <h2>Настройки</h2>
-      <dl>
-        <div><dt>dialog-service</dt><dd>{{ options["dialog_service_url"] }}</dd></div>
-        <div><dt>Уровень логов</dt><dd>{{ options["log_level"] }}</dd></div>
-      </dl>
-    </section>
-  </main>
+      <section class="dashboard-grid">
+        <article class="panel summary-panel">
+          <div class="panel-header">
+            <h2>Сводка</h2>
+            <span class="small-muted">{{ view.updated_at_full }}</span>
+          </div>
+          <div class="summary-tiles">
+            {% for tile in view.summary_tiles %}
+            <div class="summary-tile">
+              <span>{{ tile.label }}</span>
+              <strong>{{ tile.value }}</strong>
+              <small>{{ tile.hint }}</small>
+            </div>
+            {% endfor %}
+          </div>
+        </article>
+
+        <article class="panel snapshot-panel {{ view.snapshot.class }}">
+          <div class="panel-header">
+            <h2>Snapshot</h2>
+            <span class="status-badge">{{ view.snapshot.label }}</span>
+          </div>
+          <dl class="info-list">
+            <div><dt>Возраст</dt><dd>{{ view.snapshot.age }}</dd></div>
+            <div><dt>Обновлён</dt><dd>{{ view.snapshot.updated_at }}</dd></div>
+            <div><dt>Файл</dt><dd>{{ view.snapshot.path }}</dd></div>
+          </dl>
+        </article>
+      </section>
+
+      <section class="two-column">
+        <article class="panel">
+          <div class="panel-header">
+            <h2>Последние ошибки</h2>
+            <span class="counter">{{ view.incidents|length }}</span>
+          </div>
+          {% if view.incidents %}
+          <div class="list">
+            {% for incident in view.incidents %}
+            <div class="list-row bad-row">
+              <strong>{{ incident.get('title', incident.get('id', 'incident')) }}</strong>
+              <span>{{ incident.get('message', '') }}</span>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <p class="empty">Ошибок не зафиксировано.</p>
+          {% endif %}
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <h2>Последние блокировки действий</h2>
+            <span class="counter">{{ view.action_blocks|length }}</span>
+          </div>
+          {% if view.action_blocks %}
+          <div class="list">
+            {% for block in view.action_blocks %}
+            <div class="list-row warning-row">
+              <strong>{{ block.get('title', block.get('id', 'action_block')) }}</strong>
+              <span>{{ block.get('message', '') }}{% if block.get('requested_by') %} · {{ block.get('requested_by') }}{% endif %}{% if block.get('created_at') %} · {{ block.get('created_at') }}{% endif %}</span>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <p class="empty">Блокировок действий нет.</p>
+          {% endif %}
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Что делать дальше</h2>
+          <span class="counter">{{ view.recommendations|length }}</span>
+        </div>
+        {% if view.recommendations %}
+        <div class="list">
+          {% for recommendation in view.recommendations %}
+          <div class="list-row info-row">
+            <strong>{{ recommendation.get('title', recommendation.get('id', 'recommendation')) }}</strong>
+            <span>{{ recommendation.get('text', '') }}</span>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="empty">Рекомендаций нет.</p>
+        {% endif %}
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Зависимости</h2>
+          <span class="small-muted">внешние и служебные сервисы</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Сервис</th>
+                <th>Статус</th>
+                <th>Ответ</th>
+                <th>Последняя ошибка</th>
+                <th>Рекомендация</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in view.dependency_rows %}
+              <tr>
+                <td>{{ row.title }}</td>
+                <td><span class="table-status {{ row.class }}">{{ row.label }}</span></td>
+                <td>{{ row.elapsed_ms }}{% if row.elapsed_ms != '—' %} мс{% endif %}</td>
+                <td>{{ row.error }}</td>
+                <td>{{ row.recommendation }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel settings-panel">
+        <div class="panel-header">
+          <h2>Настройки подключения</h2>
+          <span class="small-muted">read-only</span>
+        </div>
+        <dl class="info-list">
+          <div><dt>dialog-service</dt><dd>{{ options["dialog_service_url"] }}</dd></div>
+          <div><dt>Уровень логов</dt><dd>{{ options["log_level"] }}</dd></div>
+        </dl>
+      </section>
+
+      <details class="raw-details">
+        <summary>Подробные проверки JSON</summary>
+        <pre>{{ view.raw | tojson(indent=2) }}</pre>
+      </details>
+    </main>
+  </div>
 </body>
 </html>
