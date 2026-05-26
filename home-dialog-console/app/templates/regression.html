@@ -57,11 +57,31 @@
           <span class="small-muted">core быстро, planner дольше</span>
         </div>
         <div class="button-row">
-          <button class="primary-button" type="button" onclick="runRegression('core')">Run core</button>
-          <button class="secondary-button" type="button" onclick="runRegression('planner')">Run planner</button>
+          <button id="run-core-button" class="primary-button" type="button" onclick="runRegression('core')">Run core</button>
+          <button id="run-planner-button" class="secondary-button" type="button" onclick="runRegression('planner')">Run planner</button>
+        </div>
+        <div id="run-progress" class="list-row info-row run-progress" hidden>
+          <strong id="run-progress-title">Проверка запущена</strong>
+          <span id="run-progress-text">Запрос отправлен. Дождитесь результата.</span>
         </div>
         <script>
           function runRegression(group) {
+            const coreButton = document.getElementById('run-core-button');
+            const plannerButton = document.getElementById('run-planner-button');
+            const progress = document.getElementById('run-progress');
+            const title = document.getElementById('run-progress-title');
+            const text = document.getElementById('run-progress-text');
+
+            if (coreButton) coreButton.disabled = true;
+            if (plannerButton) plannerButton.disabled = true;
+            if (progress) progress.hidden = false;
+            if (title) title.textContent = group === 'planner' ? 'Запускаю planner regression…' : 'Запускаю core regression…';
+            if (text) {
+              text.textContent = group === 'planner'
+                ? 'Planner может выполняться 20–60 секунд. Страница обновится после завершения.'
+                : 'Core обычно выполняется быстро. Страница обновится после завершения.';
+            }
+
             const path = window.location.pathname;
             const marker = '/regression';
             const idx = path.indexOf(marker);
