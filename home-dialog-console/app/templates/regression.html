@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HDC — Тесты</title>
+  <style>
+{% include "inline.css" %}
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">HDC</div>
+        <div>
+          <div class="brand-title">Home Dialog</div>
+          <div class="brand-subtitle">Console</div>
+        </div>
+      </div>
+      <nav class="nav">
+        {% for item in view.nav_items %}
+        <a class="nav-item {{ 'active' if item.active else '' }} {{ 'disabled' if item.get('disabled') else '' }}" href="{{ item.href }}">{{ item.title }}</a>
+        {% endfor %}
+      </nav>
+      <div class="sidebar-footer">
+        <span>HDC v{{ hdc_version }}</span>
+        <span>Regression Panel</span>
+      </div>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Home Dialog Console</p>
+          <h1>Тесты</h1>
+          <p class="muted">Безопасные regression-проверки dialog-service.</p>
+        </div>
+        <div class="topbar-actions">
+          <div class="updated">Обновлено: <strong>{{ view.updated_at }}</strong></div>
+          <button type="button" class="refresh" onclick="window.location.reload()">Обновить</button>
+        </div>
+      </header>
+
+      <section class="status-hero ok">
+        <div>
+          <div class="status-kicker">Безопасный режим</div>
+          <h2>Regression/Test Panel</h2>
+          <p>{{ view.safe_note }}</p>
+        </div>
+        <div class="status-pill">read-only</div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Запуск проверок</h2>
+          <span class="small-muted">core быстро, planner дольше</span>
+        </div>
+        <div class="button-row">
+          <form method="post" action="regression/run">
+            <input type="hidden" name="group" value="core">
+            <button class="primary-button" type="submit">Run core</button>
+          </form>
+          <form method="post" action="regression/run">
+            <input type="hidden" name="group" value="planner">
+            <button class="secondary-button" type="submit">Run planner</button>
+          </form>
+        </div>
+      </section>
+
+      <section class="dashboard-grid">
+        <article class="panel summary-panel">
+          <div class="panel-header">
+            <h2>Сводка{% if view.group %}: {{ view.group }}{% endif %}</h2>
+            {% if view.error %}<span class="table-status bad">ошибка</span>{% endif %}
+          </div>
+          {% if view.error %}<p class="empty">{{ view.error }}</p>{% endif %}
+          <div class="summary-tiles">
+            <div class="summary-tile"><span>Всего</span><strong>{{ view.summary.get('total', 0) }}</strong><small>тестов</small></div>
+            <div class="summary-tile"><span>Passed</span><strong>{{ view.summary.get('passed', 0) }}</strong><small>успешно</small></div>
+            <div class="summary-tile"><span>Failed</span><strong>{{ view.summary.get('failed', 0) }}</strong><small>ошибки</small></div>
+            <div class="summary-tile"><span>Время</span><strong>{{ view.summary.get('elapsed_ms', view.raw.get('elapsed_ms', 0)) }}</strong><small>мс</small></div>
+          </div>
+        </article>
+
+        <article class="panel snapshot-panel">
+          <div class="panel-header">
+            <h2>Доступные группы</h2>
+            <span class="status-badge">cases</span>
+          </div>
+          <dl class="info-list">
+            {% for group, item in view.cases.items() %}
+            <div>
+              <dt>{{ group }}</dt>
+              <dd>{% if item.ok %}доступно · {{ item.elapsed_ms }} мс{% else %}ошибка: {{ item.error }}{% endif %}</dd>
+            </div>
+            {% endfor %}
+          </dl>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Результаты</h2>
+          <span class="small-muted">{{ view.results|length }} строк</span>
+        </div>
+        {% if view.results %}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Статус</th>
+                <th>case_id</th>
+                <th>Группа</th>
+                <th>Название</th>
+                <th>Время</th>
+                <th>Ошибка</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in view.results %}
+              {% set failed = row.get('passed') is sameas false or row.get('status') in ['failed', 'error'] %}
+              <tr>
+                <td><span class="table-status {{ 'bad' if failed else 'ok' }}">{{ 'failed' if failed else 'passed' }}</span></td>
+                <td>{{ row.get('case_id', row.get('id', '—')) }}</td>
+                <td>{{ row.get('group', view.group or '—') }}</td>
+                <td>{{ row.get('title', row.get('name', '—')) }}</td>
+                <td>{{ row.get('elapsed_ms', '—') }}{% if row.get('elapsed_ms') is not none %} мс{% endif %}</td>
+                <td>
+                  {% if failed %}
+                    {{ row.get('error', '') }}
+                    {% if row.get('failures') %}<pre class="mini-pre">{{ row.get('failures') | tojson(indent=2) }}</pre>{% endif %}
+                    {% if row.get('response_excerpt') %}<pre class="mini-pre">{{ row.get('response_excerpt') }}</pre>{% endif %}
+                    {% if row.get('http_status') %}<div>HTTP {{ row.get('http_status') }}</div>{% endif %}
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <p class="empty">Проверки ещё не запускались на этом экране.</p>
+        {% endif %}
+      </section>
+
+      <details class="raw-details">
+        <summary>Raw response</summary>
+        <pre>{{ view.raw | tojson(indent=2) }}</pre>
+      </details>
+    </main>
+  </div>
+</body>
+</html>
