@@ -8,12 +8,12 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.14"
+APP_VERSION = "0.1.15"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 BASE_DIR = Path(__file__).resolve().parent
@@ -329,8 +329,8 @@ async def regression(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "regression.html", {"view": view, "options": public_options(options), "hdc_version": APP_VERSION})
 
 
-@app.post("/regression/run", response_class=HTMLResponse)
-async def regression_run(request: Request, group: str = Form(...)) -> HTMLResponse:
+@app.post("/regression/run/{group}", response_class=HTMLResponse)
+async def regression_run(request: Request, group: str) -> HTMLResponse:
     options = load_options()
     dialog_service_url = str(options["dialog_service_url"]).rstrip("/")
     cases = await fetch_regression_cases(dialog_service_url)
