@@ -57,13 +57,22 @@
           <span class="small-muted">core быстро, planner дольше</span>
         </div>
         <div class="button-row">
-          <form method="post" action="regression/run/core">
-            <button class="primary-button" type="submit">Run core</button>
-          </form>
-          <form method="post" action="regression/run/planner">
-            <button class="secondary-button" type="submit">Run planner</button>
-          </form>
+          <button class="primary-button" type="button" onclick="runRegression('core')">Run core</button>
+          <button class="secondary-button" type="button" onclick="runRegression('planner')">Run planner</button>
         </div>
+        <script>
+          function runRegression(group) {
+            const path = window.location.pathname;
+            const marker = '/regression';
+            const idx = path.indexOf(marker);
+            const base = idx >= 0 ? path.slice(0, idx + marker.length) : 'regression';
+            const form = document.createElement('form');
+            form.method = 'post';
+            form.action = base + '/run/' + encodeURIComponent(group);
+            document.body.appendChild(form);
+            form.submit();
+          }
+        </script>
       </section>
 
       <section class="dashboard-grid">
