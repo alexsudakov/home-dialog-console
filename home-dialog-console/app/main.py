@@ -8,12 +8,12 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, Form, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.13"
+APP_VERSION = "0.1.14"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 BASE_DIR = Path(__file__).resolve().parent
@@ -33,43 +33,25 @@ SERVICE_CARD_MAP: dict[str, dict[str, str]] = {
     "system_runtime_snapshot": {"title": "System Snapshot", "icon": "🕒", "description": "Свежесть runtime-снимка."},
 }
 
-PRIMARY_SERVICE_IDS = [
-    "dialog_service",
-    "planner_llama",
-    "telegram_runner",
-    "ha_api",
-    "source_selector",
-    "qdrant",
-    "llm_log_helper",
-    "redis",
-]
+PRIMARY_SERVICE_IDS = ["dialog_service", "planner_llama", "telegram_runner", "ha_api", "source_selector", "qdrant", "llm_log_helper", "redis"]
+DEPENDENCY_IDS = ["redis", "ha_api", "telegram_runner", "planner_llama", "source_selector", "qdrant", "llm_log_helper", "ollama", "config_db", "action_executor", "system_runtime_snapshot"]
 
-DEPENDENCY_IDS = [
-    "redis",
-    "ha_api",
-    "telegram_runner",
-    "planner_llama",
-    "source_selector",
-    "qdrant",
-    "llm_log_helper",
-    "ollama",
-    "config_db",
-    "action_executor",
-    "system_runtime_snapshot",
-]
 
-NAV_ITEMS = [
-    {"title": "Обзор", "href": ".", "active": True, "disabled": False},
-    {"title": "Окружение", "href": "#environment", "active": False, "disabled": True},
-    {"title": "Qdrant", "href": "#qdrant", "active": False, "disabled": True},
-    {"title": "Промты", "href": "#prompts", "active": False, "disabled": True},
-    {"title": "Анализаторы", "href": "#analyzers", "active": False, "disabled": True},
-    {"title": "Действия", "href": "#actions", "active": False, "disabled": True},
-    {"title": "Объекты", "href": "#objects", "active": False, "disabled": True},
-    {"title": "База данных", "href": "#database", "active": False, "disabled": True},
-    {"title": "Логи", "href": "#logs", "active": False, "disabled": True},
-    {"title": "О системе", "href": "#about", "active": False, "disabled": True},
-]
+def nav_items(active: str = "overview") -> list[dict[str, Any]]:
+    return [
+        {"id": "overview", "title": "Обзор", "href": ".", "active": active == "overview", "disabled": False},
+        {"id": "regression", "title": "Тесты", "href": "regression", "active": active == "regression", "disabled": False},
+        {"id": "environment", "title": "Окружение", "href": "#environment", "active": active == "environment", "disabled": True},
+        {"id": "qdrant", "title": "Qdrant", "href": "#qdrant", "active": active == "qdrant", "disabled": True},
+        {"id": "prompts", "title": "Промты", "href": "#prompts", "active": active == "prompts", "disabled": True},
+        {"id": "analyzers", "title": "Анализаторы", "href": "#analyzers", "active": active == "analyzers", "disabled": True},
+        {"id": "actions", "title": "Действия", "href": "#actions", "active": active == "actions", "disabled": True},
+        {"id": "objects", "title": "Объекты", "href": "#objects", "active": active == "objects", "disabled": True},
+        {"id": "database", "title": "База данных", "href": "#database", "active": active == "database", "disabled": True},
+        {"id": "logs", "title": "Логи", "href": "#logs", "active": active == "logs", "disabled": True},
+        {"id": "about", "title": "О системе", "href": "#about", "active": active == "about", "disabled": True},
+    ]
+
 
 app = FastAPI(title="Home Dialog Console", version=APP_VERSION)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
@@ -110,6 +92,22 @@ async def get_json(url: str, timeout: float = 8.0) -> tuple[bool, int | None, in
         return False, None, elapsed_ms, None, f"{type(exc).__name__}: {exc or 'no details'}"
 
 
+async def post_json(url: str, payload: dict[str, Any] | None = None, timeout: float = 90.0) -> tuple[bool, int | None, int, Any, str]:
+    started = time.perf_counter()
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(url, json=payload or {})
+        elapsed_ms = round((time.perf_counter() - started) * 1000)
+        try:
+            data: Any = response.json()
+        except Exception:
+            data = response.text[:2000]
+        return 200 <= response.status_code < 300, response.status_code, elapsed_ms, data, ""
+    except Exception as exc:
+        elapsed_ms = round((time.perf_counter() - started) * 1000)
+        return False, None, elapsed_ms, None, f"{type(exc).__name__}: {exc or 'no details'}"
+
+
 def fallback_summary(options: dict[str, Any], url: str, status_code: int | None, elapsed_ms: int, error: str) -> dict[str, Any]:
     return {
         "ok": False,
@@ -132,7 +130,6 @@ async def build_diagnostics() -> dict[str, Any]:
     dialog_service_url = str(options["dialog_service_url"]).rstrip("/")
     diagnostics_url = f"{dialog_service_url}/admin/diagnostics/summary"
     ok, status_code, elapsed_ms, payload, error = await get_json(diagnostics_url)
-
     if ok and isinstance(payload, dict):
         checks = [hdc_check()]
         checks.extend(payload.get("checks") or [])
@@ -140,7 +137,6 @@ async def build_diagnostics() -> dict[str, Any]:
         summary["total"] = int(summary.get("total", 0)) + 1
         summary["ok"] = int(summary.get("ok", 0)) + 1
         return {**payload, "hdc_version": APP_VERSION, "dialog_service_url": dialog_service_url, "options": public_options(options), "summary": summary, "incidents": payload.get("incidents") or [], "recommendations": payload.get("recommendations") or [], "action_blocks": payload.get("action_blocks") or [], "checks": checks}
-
     return fallback_summary(options, diagnostics_url, status_code, elapsed_ms, error)
 
 
@@ -267,7 +263,44 @@ def build_view_model(diagnostics: dict[str, Any]) -> dict[str, Any]:
         overall = {"class": "warning", "title": "Система работает с предупреждениями", "description": "Есть некритичные проблемы или устаревшие данные, требующие внимания.", "label": "предупреждение"}
     else:
         overall = {"class": "bad", "title": "Система работает с ошибками", "description": "Одна или несколько ключевых зависимостей недоступны.", "label": "ошибка"}
-    return {"nav_items": NAV_ITEMS, "overall": overall, "updated_at": format_time(diagnostics.get("generated_at")), "updated_at_full": format_dt(diagnostics.get("generated_at")), "service_cards": build_service_cards(checks), "summary_tiles": build_summary_tiles(diagnostics, recommendations_visible), "snapshot": build_snapshot(checks), "dependency_rows": build_dependency_rows(checks, recommendations_visible), "incidents": incidents, "recommendations": recommendations_visible, "recommendations_empty_text": "Действий не требуется: все диагностические проверки зелёные.", "action_blocks": diagnostics.get("action_blocks") or [], "checks": checks, "raw": diagnostics}
+    return {"nav_items": nav_items("overview"), "overall": overall, "updated_at": format_time(diagnostics.get("generated_at")), "updated_at_full": format_dt(diagnostics.get("generated_at")), "service_cards": build_service_cards(checks), "summary_tiles": build_summary_tiles(diagnostics, recommendations_visible), "snapshot": build_snapshot(checks), "dependency_rows": build_dependency_rows(checks, recommendations_visible), "incidents": incidents, "recommendations": recommendations_visible, "recommendations_empty_text": "Действий не требуется: все диагностические проверки зелёные.", "action_blocks": diagnostics.get("action_blocks") or [], "checks": checks, "raw": diagnostics}
+
+
+def build_regression_view(payload: dict[str, Any] | None, cases: dict[str, Any], group: str | None = None, error: str = "") -> dict[str, Any]:
+    summary = (payload or {}).get("summary") or {}
+    results = (payload or {}).get("results") or []
+    return {
+        "nav_items": nav_items("regression"),
+        "group": group or "",
+        "summary": summary,
+        "results": results,
+        "raw": payload or {},
+        "cases": cases,
+        "error": error,
+        "updated_at": format_time(datetime.now(timezone.utc).isoformat()),
+        "safe_note": "Эти тесты безопасны: они не вызывают /admin/actions/execute и не выполняют действия в Home Assistant.",
+    }
+
+
+async def fetch_regression_cases(dialog_service_url: str) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for group in ("core", "planner"):
+        ok, status_code, elapsed_ms, payload, error = await get_json(f"{dialog_service_url}/admin/regression/cases?group={group}", timeout=15.0)
+        out[group] = {"ok": ok, "status_code": status_code, "elapsed_ms": elapsed_ms, "payload": payload if ok else None, "error": error}
+    return out
+
+
+async def run_regression_group(group: str) -> tuple[dict[str, Any] | None, str]:
+    if group not in {"core", "planner"}:
+        return None, "Недопустимая группа тестов."
+    options = load_options()
+    dialog_service_url = str(options["dialog_service_url"]).rstrip("/")
+    timeout = 25.0 if group == "core" else 120.0
+    ok, status_code, elapsed_ms, payload, error = await post_json(f"{dialog_service_url}/admin/regression/run?group={group}", timeout=timeout)
+    if ok and isinstance(payload, dict):
+        payload.setdefault("elapsed_ms", elapsed_ms)
+        return payload, ""
+    return {"summary": {"total": 0, "passed": 0, "failed": 1, "elapsed_ms": elapsed_ms}, "results": [], "status_code": status_code}, error or f"HTTP {status_code}"
 
 
 @app.get("/health")
@@ -285,3 +318,22 @@ async def index(request: Request) -> HTMLResponse:
     diagnostics = await build_diagnostics()
     view = build_view_model(diagnostics)
     return templates.TemplateResponse(request, "index.html", {"diagnostics": diagnostics, "view": view, "options": diagnostics["options"]})
+
+
+@app.get("/regression", response_class=HTMLResponse)
+async def regression(request: Request) -> HTMLResponse:
+    options = load_options()
+    dialog_service_url = str(options["dialog_service_url"]).rstrip("/")
+    cases = await fetch_regression_cases(dialog_service_url)
+    view = build_regression_view(None, cases)
+    return templates.TemplateResponse(request, "regression.html", {"view": view, "options": public_options(options), "hdc_version": APP_VERSION})
+
+
+@app.post("/regression/run", response_class=HTMLResponse)
+async def regression_run(request: Request, group: str = Form(...)) -> HTMLResponse:
+    options = load_options()
+    dialog_service_url = str(options["dialog_service_url"]).rstrip("/")
+    cases = await fetch_regression_cases(dialog_service_url)
+    payload, error = await run_regression_group(group)
+    view = build_regression_view(payload, cases, group=group, error=error)
+    return templates.TemplateResponse(request, "regression.html", {"view": view, "options": public_options(options), "hdc_version": APP_VERSION})
