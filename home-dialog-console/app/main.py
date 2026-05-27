@@ -14,7 +14,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.23"
+APP_VERSION = "0.1.24"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 BASE_DIR = Path(__file__).resolve().parent
@@ -333,13 +333,16 @@ def regression_log_payload(group: str, payload: dict[str, Any] | None, error: st
             "ok": row.get("ok"),
             "elapsed_ms": row.get("elapsed_ms"),
             "http_status": row.get("http_status"),
+            "endpoint": row.get("endpoint"),
             "planner_runtime": excerpt.get("planner_runtime") or model_call.get("runtime"),
             "model": excerpt.get("model"),
-            "plan_type": validated_plan.get("plan_type"),
+            "plan_type": validated_plan.get("plan_type") or excerpt.get("plan_type") or route_shortcut.get("plan_type"),
             "selected_analyzer_ids": validated_plan.get("selected_analyzer_ids") or [],
-            "route_id": model_call.get("route_id") or route_shortcut.get("route_id"),
+            "route_id": model_call.get("route_id") or excerpt.get("route_id") or route_shortcut.get("route_id"),
             "route_accepted": excerpt.get("accepted") if "accepted" in excerpt else route_shortcut.get("accepted"),
             "route_reject_reason": excerpt.get("reject_reason") or route_shortcut.get("reject_reason"),
+            "best_positive_score": excerpt.get("best_positive_score") or route_shortcut.get("best_positive_score"),
+            "candidate_score": excerpt.get("candidate_score") or route_shortcut.get("candidate_score"),
             "failures": row.get("failures") or [],
             "error": row.get("error") or "",
         })
