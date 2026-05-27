@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.20"
+APP_VERSION = "0.1.21"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 BASE_DIR = Path(__file__).resolve().parent
@@ -307,7 +307,7 @@ def build_regression_view(payload: dict[str, Any] | None, cases: dict[str, Any],
         "error": error,
         "updated_at": format_time(datetime.now(timezone.utc).isoformat()),
         "safe_note": "Эти тесты безопасны: они не вызывают /admin/actions/execute и не выполняют действия в Home Assistant.",
-        "planner_note": "Planner regression теперь включает защитные проверки route-card и может выполняться 3–5 минут.",
+        "planner_note": "Planner regression включает быстрые route-card проверки и обычно выполняется 1–2 минуты.",
     }
 
 
@@ -324,7 +324,7 @@ async def run_regression_group(group: str) -> tuple[dict[str, Any] | None, str]:
         return None, "Недопустимая группа тестов."
     options = load_options()
     dialog_service_url = str(options["dialog_service_url"]).rstrip("/")
-    timeout = 30.0 if group == "core" else 360.0
+    timeout = 30.0 if group == "core" else 180.0
     ok, status_code, elapsed_ms, payload, error = await post_json(f"{dialog_service_url}/admin/regression/run?group={group}", timeout=timeout)
     if ok and isinstance(payload, dict):
         payload.setdefault("elapsed_ms", elapsed_ms)
