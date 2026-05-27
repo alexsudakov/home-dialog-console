@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.19"
+APP_VERSION = "0.1.20"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 BASE_DIR = Path(__file__).resolve().parent
@@ -266,9 +266,37 @@ def build_view_model(diagnostics: dict[str, Any]) -> dict[str, Any]:
     return {"nav_items": nav_items("overview"), "overall": overall, "updated_at": format_time(diagnostics.get("generated_at")), "updated_at_full": format_dt(diagnostics.get("generated_at")), "service_cards": build_service_cards(checks), "summary_tiles": build_summary_tiles(diagnostics, recommendations_visible), "snapshot": build_snapshot(checks), "dependency_rows": build_dependency_rows(checks, recommendations_visible), "incidents": incidents, "recommendations": recommendations_visible, "recommendations_empty_text": "Действий не требуется: все диагностические проверки зелёные.", "action_blocks": diagnostics.get("action_blocks") or [], "checks": checks, "raw": diagnostics}
 
 
+def regression_result_view(row: dict[str, Any]) -> dict[str, Any]:
+    excerpt = row.get("response_excerpt") if isinstance(row.get("response_excerpt"), dict) else {}
+    validated_plan = excerpt.get("validated_plan") if isinstance(excerpt.get("validated_plan"), dict) else {}
+    model_call = excerpt.get("model_call") if isinstance(excerpt.get("model_call"), dict) else {}
+
+    analyzer_ids = validated_plan.get("selected_analyzer_ids") or []
+    if not isinstance(analyzer_ids, list):
+        analyzer_ids = []
+
+    runtime = excerpt.get("planner_runtime") or model_call.get("runtime") or "—"
+    plan_type = validated_plan.get("plan_type") or "—"
+
+    route_confidence = ""
+    if runtime == "source_selector_route":
+        best_positive_score = model_call.get("best_positive_score")
+        candidate_score = model_call.get("candidate_score")
+        if best_positive_score is not None or candidate_score is not None:
+            route_confidence = f"positive={best_positive_score}; score={candidate_score}"
+
+    return {
+        **row,
+        "planner_runtime": runtime,
+        "plan_type": plan_type,
+        "analyzer_ids": ", ".join(str(item) for item in analyzer_ids) if analyzer_ids else "—",
+        "route_confidence": route_confidence,
+    }
+
+
 def build_regression_view(payload: dict[str, Any] | None, cases: dict[str, Any], group: str | None = None, error: str = "") -> dict[str, Any]:
     summary = (payload or {}).get("summary") or {}
-    results = (payload or {}).get("results") or []
+    results = [regression_result_view(item) for item in ((payload or {}).get("results") or [])]
     return {
         "nav_items": nav_items("regression"),
         "group": group or "",
@@ -279,6 +307,7 @@ def build_regression_view(payload: dict[str, Any] | None, cases: dict[str, Any],
         "error": error,
         "updated_at": format_time(datetime.now(timezone.utc).isoformat()),
         "safe_note": "Эти тесты безопасны: они не вызывают /admin/actions/execute и не выполняют действия в Home Assistant.",
+        "planner_note": "Planner regression теперь включает защитные проверки route-card и может выполняться 3–5 минут.",
     }
 
 
@@ -295,7 +324,7 @@ async def run_regression_group(group: str) -> tuple[dict[str, Any] | None, str]:
         return None, "Недопустимая группа тестов."
     options = load_options()
     dialog_service_url = str(options["dialog_service_url"]).rstrip("/")
-    timeout = 25.0 if group == "core" else 120.0
+    timeout = 30.0 if group == "core" else 360.0
     ok, status_code, elapsed_ms, payload, error = await post_json(f"{dialog_service_url}/admin/regression/run?group={group}", timeout=timeout)
     if ok and isinstance(payload, dict):
         payload.setdefault("elapsed_ms", elapsed_ms)

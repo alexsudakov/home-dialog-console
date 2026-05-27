@@ -47,6 +47,7 @@
           <div class="status-kicker">Безопасный режим</div>
           <h2>Regression/Test Panel</h2>
           <p>{{ view.safe_note }}</p>
+          <p class="muted">{{ view.planner_note }}</p>
         </div>
         <div class="status-pill">read-only</div>
       </section>
@@ -78,7 +79,7 @@
             if (title) title.textContent = group === 'planner' ? 'Запускаю planner regression…' : 'Запускаю core regression…';
             if (text) {
               text.textContent = group === 'planner'
-                ? 'Planner может выполняться 20–60 секунд. Страница обновится после завершения.'
+                ? 'Planner regression может выполняться 3–5 минут. Страница обновится после завершения. Действия в Home Assistant не выполняются.'
                 : 'Core обычно выполняется быстро. Страница обновится после завершения.';
             }
 
@@ -140,8 +141,11 @@
                 <th>case_id</th>
                 <th>Группа</th>
                 <th>Название</th>
+                <th>Runtime</th>
+                <th>Plan</th>
+                <th>Анализаторы</th>
                 <th>Время</th>
-                <th>Ошибка</th>
+                <th>Детали</th>
               </tr>
             </thead>
             <tbody>
@@ -152,6 +156,16 @@
                 <td>{{ row.get('case_id', row.get('id', '—')) }}</td>
                 <td>{{ row.get('group', view.group or '—') }}</td>
                 <td>{{ row.get('title', row.get('name', '—')) }}</td>
+                <td>
+                  <span class="table-status {{ 'ok' if row.get('planner_runtime') == 'source_selector_route' else 'neutral' }}">
+                    {{ row.get('planner_runtime', '—') }}
+                  </span>
+                  {% if row.get('route_confidence') %}
+                    <div class="small-muted">{{ row.get('route_confidence') }}</div>
+                  {% endif %}
+                </td>
+                <td>{{ row.get('plan_type', '—') }}</td>
+                <td>{{ row.get('analyzer_ids', '—') }}</td>
                 <td>{{ row.get('elapsed_ms', '—') }}{% if row.get('elapsed_ms') is not none %} мс{% endif %}</td>
                 <td>
                   {% if failed %}
@@ -160,7 +174,14 @@
                     {% if row.get('response_excerpt') %}<pre class="mini-pre">{{ row.get('response_excerpt') }}</pre>{% endif %}
                     {% if row.get('http_status') %}<div>HTTP {{ row.get('http_status') }}</div>{% endif %}
                   {% else %}
-                    —
+                    {% if row.get('response_excerpt') %}
+                      <details>
+                        <summary>response</summary>
+                        <pre class="mini-pre">{{ row.get('response_excerpt') }}</pre>
+                      </details>
+                    {% else %}
+                      —
+                    {% endif %}
                   {% endif %}
                 </td>
               </tr>
