@@ -14,7 +14,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.22"
+APP_VERSION = "0.1.23"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 BASE_DIR = Path(__file__).resolve().parent
@@ -359,9 +359,10 @@ def regression_log_payload(group: str, payload: dict[str, Any] | None, error: st
 
 def log_regression_result(group: str, payload: dict[str, Any] | None, error: str = "") -> None:
     log_payload = regression_log_payload(group, payload, error=error)
-    logger.info(
-        "REGRESSION_RUN_RESULT_JSON %s",
-        json.dumps(log_payload, ensure_ascii=False, separators=(",", ":")),
+    print(
+        "REGRESSION_RUN_RESULT_JSON "
+        + json.dumps(log_payload, ensure_ascii=False, separators=(",", ":")),
+        flush=True,
     )
 
 
