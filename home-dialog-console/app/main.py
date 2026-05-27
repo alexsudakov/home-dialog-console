@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from datetime import datetime, timezone
@@ -13,7 +14,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.21"
+APP_VERSION = "0.1.22"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 BASE_DIR = Path(__file__).resolve().parent
@@ -56,6 +57,8 @@ def nav_items(active: str = "overview") -> list[dict[str, Any]]:
 app = FastAPI(title="Home Dialog Console", version=APP_VERSION)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+logger = logging.getLogger("home_dialog_console.regression")
 
 
 def load_options() -> dict[str, Any]:
@@ -311,6 +314,57 @@ def build_regression_view(payload: dict[str, Any] | None, cases: dict[str, Any],
     }
 
 
+def regression_log_payload(group: str, payload: dict[str, Any] | None, error: str = "") -> dict[str, Any]:
+    payload = payload or {}
+    compact_results: list[dict[str, Any]] = []
+
+    for row in payload.get("results") or []:
+        if not isinstance(row, dict):
+            continue
+
+        excerpt = row.get("response_excerpt") if isinstance(row.get("response_excerpt"), dict) else {}
+        validated_plan = excerpt.get("validated_plan") if isinstance(excerpt.get("validated_plan"), dict) else {}
+        model_call = excerpt.get("model_call") if isinstance(excerpt.get("model_call"), dict) else {}
+        route_shortcut = excerpt.get("route_shortcut") if isinstance(excerpt.get("route_shortcut"), dict) else {}
+
+        compact_results.append({
+            "case_id": row.get("case_id"),
+            "status": row.get("status"),
+            "ok": row.get("ok"),
+            "elapsed_ms": row.get("elapsed_ms"),
+            "http_status": row.get("http_status"),
+            "planner_runtime": excerpt.get("planner_runtime") or model_call.get("runtime"),
+            "model": excerpt.get("model"),
+            "plan_type": validated_plan.get("plan_type"),
+            "selected_analyzer_ids": validated_plan.get("selected_analyzer_ids") or [],
+            "route_id": model_call.get("route_id") or route_shortcut.get("route_id"),
+            "route_accepted": excerpt.get("accepted") if "accepted" in excerpt else route_shortcut.get("accepted"),
+            "route_reject_reason": excerpt.get("reject_reason") or route_shortcut.get("reject_reason"),
+            "failures": row.get("failures") or [],
+            "error": row.get("error") or "",
+        })
+
+    return {
+        "event": "regression_run_result",
+        "group": group,
+        "ok": bool(payload.get("ok")),
+        "suite": payload.get("suite") or group,
+        "base_url": payload.get("base_url"),
+        "elapsed_ms": payload.get("elapsed_ms") or (payload.get("summary") or {}).get("elapsed_ms"),
+        "summary": payload.get("summary") or {},
+        "error": error,
+        "results": compact_results,
+    }
+
+
+def log_regression_result(group: str, payload: dict[str, Any] | None, error: str = "") -> None:
+    log_payload = regression_log_payload(group, payload, error=error)
+    logger.info(
+        "REGRESSION_RUN_RESULT_JSON %s",
+        json.dumps(log_payload, ensure_ascii=False, separators=(",", ":")),
+    )
+
+
 async def fetch_regression_cases(dialog_service_url: str) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for group in ("core", "planner"):
@@ -328,8 +382,16 @@ async def run_regression_group(group: str) -> tuple[dict[str, Any] | None, str]:
     ok, status_code, elapsed_ms, payload, error = await post_json(f"{dialog_service_url}/admin/regression/run?group={group}", timeout=timeout)
     if ok and isinstance(payload, dict):
         payload.setdefault("elapsed_ms", elapsed_ms)
+        log_regression_result(group, payload)
         return payload, ""
-    return {"summary": {"total": 0, "passed": 0, "failed": 1, "elapsed_ms": elapsed_ms}, "results": [], "status_code": status_code}, error or f"HTTP {status_code}"
+
+    fallback_payload = {
+        "summary": {"total": 0, "passed": 0, "failed": 1, "elapsed_ms": elapsed_ms},
+        "results": [],
+        "status_code": status_code,
+    }
+    log_regression_result(group, fallback_payload, error=error or f"HTTP {status_code}")
+    return fallback_payload, error or f"HTTP {status_code}"
 
 
 @app.get("/health")
