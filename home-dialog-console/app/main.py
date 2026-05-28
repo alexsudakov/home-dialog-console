@@ -17,9 +17,10 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.27"
+APP_VERSION = "0.1.28"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
+DEFAULT_RETRIEVAL_SERVICE_URL = "http://192.168.1.138:8085"
 BASE_DIR = Path(__file__).resolve().parent
 
 SERVICE_CARD_MAP: dict[str, dict[str, str]] = {
@@ -66,16 +67,28 @@ logger = logging.getLogger("home_dialog_console.regression")
 
 def load_options() -> dict[str, Any]:
     if not CONFIG_PATH.exists():
-        return {"dialog_service_url": os.getenv("DIALOG_SERVICE_URL", DEFAULT_DIALOG_SERVICE_URL), "log_level": os.getenv("LOG_LEVEL", "info")}
+        return {
+            "dialog_service_url": os.getenv("DIALOG_SERVICE_URL", DEFAULT_DIALOG_SERVICE_URL),
+            "retrieval_service_url": os.getenv("RETRIEVAL_SERVICE_URL", DEFAULT_RETRIEVAL_SERVICE_URL),
+            "log_level": os.getenv("LOG_LEVEL", "info"),
+        }
     try:
         data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     except Exception:
         data = {}
-    return {"dialog_service_url": data.get("dialog_service_url") or DEFAULT_DIALOG_SERVICE_URL, "log_level": data.get("log_level") or "info"}
+    return {
+        "dialog_service_url": data.get("dialog_service_url") or DEFAULT_DIALOG_SERVICE_URL,
+        "retrieval_service_url": data.get("retrieval_service_url") or DEFAULT_RETRIEVAL_SERVICE_URL,
+        "log_level": data.get("log_level") or "info",
+    }
 
 
 def public_options(options: dict[str, Any]) -> dict[str, Any]:
-    return {"dialog_service_url": options.get("dialog_service_url"), "log_level": options.get("log_level")}
+    return {
+        "dialog_service_url": options.get("dialog_service_url"),
+        "retrieval_service_url": options.get("retrieval_service_url"),
+        "log_level": options.get("log_level"),
+    }
 
 
 def hdc_check() -> dict[str, Any]:
@@ -498,14 +511,22 @@ async def qdrant_route_probe(dialog_service_url: str, question: str, expected: s
     }
 
 
-async def build_qdrant_view() -> dict[str, Any]:
+async def build_qdrant_view(reindex_result: dict[str, Any] | None = None) -> dict[str, Any]:
     diagnostics = await build_diagnostics()
     checks = diagnostics.get("checks") or []
     options = load_options()
     dialog_service_url = str(options["dialog_service_url"]).rstrip("/")
+    retrieval_service_url = str(options["retrieval_service_url"]).rstrip("/")
 
     qdrant_card = check_card_from_diagnostics(checks, "qdrant")
     source_selector_card = check_card_from_diagnostics(checks, "source_selector")
+
+    cards_ok, cards_status, cards_elapsed_ms, cards_payload, cards_error = await get_json(
+        f"{retrieval_service_url}/source/cards",
+        timeout=20.0,
+    )
+    cards_data = cards_payload if isinstance(cards_payload, dict) else {}
+    source_cards = cards_data.get("sources") if isinstance(cards_data.get("sources"), list) else []
 
     probes = [
         await qdrant_route_probe(dialog_service_url, "Что с вытяжкой на кухне?", "accepted"),
@@ -517,7 +538,8 @@ async def build_qdrant_view() -> dict[str, Any]:
     source_response = nested_response(source_details)
 
     collection = (
-        source_response.get("source_collection")
+        cards_data.get("collection")
+        or source_response.get("source_collection")
         or source_response.get("collection")
         or source_details.get("source_collection")
         or source_details.get("collection")
@@ -529,7 +551,8 @@ async def build_qdrant_view() -> dict[str, Any]:
     )
 
     model = (
-        source_response.get("embedding_model")
+        cards_data.get("model")
+        or source_response.get("embedding_model")
         or source_response.get("model")
         or source_details.get("embedding_model")
         or source_details.get("model")
@@ -550,13 +573,27 @@ async def build_qdrant_view() -> dict[str, Any]:
             {"label": "Qdrant", "value": qdrant_card["label"], "hint": qdrant_card["status"]},
             {"label": "Source Selector", "value": source_selector_card["label"], "hint": source_selector_card["status"]},
             {"label": "Collection", "value": collection, "hint": "source cards"},
+            {"label": "Cards", "value": str(len(source_cards)), "hint": "source_cards.yaml"},
             {"label": "Probes", "value": f"{probe_ok_count}/2", "hint": "route-card"},
         ],
         "cards": [qdrant_card, source_selector_card],
         "probes": probes,
+        "source_cards": source_cards,
+        "source_cards_status": {
+            "ok": cards_ok and bool(cards_data.get("ok", cards_ok)),
+            "status_code": cards_status,
+            "elapsed_ms": cards_elapsed_ms,
+            "error": cards_error or cards_data.get("error") or "",
+            "cards_path": cards_data.get("cards_path") or "нет данных",
+            "sources_count": cards_data.get("sources_count") or len(source_cards),
+            "chunks_count": cards_data.get("chunks_count"),
+            "version": cards_data.get("version") or "нет данных",
+        },
+        "reindex_result": reindex_result,
         "collection": collection,
         "model": model,
         "dialog_service_url": dialog_service_url,
+        "retrieval_service_url": retrieval_service_url,
         "overall": {
             "class": "ok" if ok_count == 2 and probe_ok_count == 2 else "warning",
             "title": "Qdrant и Source Selector доступны" if ok_count == 2 and probe_ok_count == 2 else "Есть предупреждения по Qdrant / Source Selector",
@@ -568,8 +605,11 @@ async def build_qdrant_view() -> dict[str, Any]:
             "qdrant": qdrant_card,
             "source_selector": source_selector_card,
             "probes": probes,
+            "source_cards": source_cards,
+            "source_cards_status": cards_data,
             "collection": collection,
             "model": model,
+            "retrieval_service_url": retrieval_service_url,
         },
     }
 
@@ -729,6 +769,27 @@ async def environment(request: Request) -> HTMLResponse:
 @app.get("/qdrant", response_class=HTMLResponse)
 async def qdrant(request: Request) -> HTMLResponse:
     view = await build_qdrant_view()
+    return templates.TemplateResponse(request, "qdrant.html", {"view": view, "hdc_version": APP_VERSION})
+
+
+@app.post("/qdrant/reindex", response_class=HTMLResponse)
+async def qdrant_reindex(request: Request) -> HTMLResponse:
+    options = load_options()
+    retrieval_service_url = str(options["retrieval_service_url"]).rstrip("/")
+    ok, status_code, elapsed_ms, payload, error = await post_json(
+        f"{retrieval_service_url}/source/index",
+        {},
+        timeout=120.0,
+    )
+    data = payload if isinstance(payload, dict) else {}
+    reindex_result = {
+        "ok": ok and bool(data.get("ok", ok)),
+        "status_code": status_code,
+        "elapsed_ms": elapsed_ms,
+        "error": error or data.get("error") or "",
+        "payload": data,
+    }
+    view = await build_qdrant_view(reindex_result=reindex_result)
     return templates.TemplateResponse(request, "qdrant.html", {"view": view, "hdc_version": APP_VERSION})
 
 

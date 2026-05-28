@@ -1,5 +1,5 @@
 name: Home Dialog Console
-version: "0.1.27"
+version: "0.1.28"
 slug: home_dialog_console
 description: Diagnostic and control console for a local dialog-service
 url: "https://github.com/alexsudakov/home-dialog-console"
@@ -24,10 +24,12 @@ hassio_role: default
 
 options:
   dialog_service_url: "http://127.0.0.1:8090"
+  retrieval_service_url: "http://192.168.1.138:8085"
   log_level: "info"
 
 schema:
   dialog_service_url: str
+  retrieval_service_url: str
   log_level: list(debug|info|warning|error)
 
 ports:

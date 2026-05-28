@@ -34,7 +34,7 @@
         <div>
           <p class="eyebrow">Home Dialog Console</p>
           <h1>Qdrant</h1>
-          <p class="muted">Информация о векторной базе и Source Selector. Раздел не хранит и не показывает Qdrant API key.</p>
+          <p class="muted">Карточки Source Selector, состояние индекса и ручная переиндексация Qdrant.</p>
         </div>
         <div class="topbar-actions">
           <div class="updated">Обновлено: <strong>{{ view.updated_at }}</strong></div>
@@ -44,7 +44,7 @@
 
       <section class="status-hero {{ view.overall.class }}">
         <div>
-          <div class="status-kicker">Read-only</div>
+          <div class="status-kicker">Admin / read-mostly</div>
           <h2>{{ view.overall.title }}</h2>
           <p>{{ view.overall.description }}</p>
         </div>
@@ -65,6 +65,50 @@
           </div>
           {% endfor %}
         </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Переиндексация</h2>
+          <span class="small-muted">{{ view.retrieval_service_url }}/source/index</span>
+        </div>
+        <p class="muted">Кнопка пересоздаёт индекс Qdrant из текущего source_cards.yaml. Действия в Home Assistant не выполняются.</p>
+        <form method="post" action="qdrant/reindex">
+          <button type="submit" class="refresh">Переиндексировать Qdrant</button>
+        </form>
+
+        {% if view.reindex_result %}
+        <div class="table-wrap" style="margin-top: 16px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Итог</th>
+                <th>HTTP</th>
+                <th>Время HDC</th>
+                <th>Collection</th>
+                <th>Model</th>
+                <th>Sources</th>
+                <th>Chunks</th>
+                <th>Elapsed service</th>
+                <th>Error</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="table-status {{ 'ok' if view.reindex_result.ok else 'bad' }}">{{ 'ok' if view.reindex_result.ok else 'error' }}</span></td>
+                <td>{{ view.reindex_result.status_code }}</td>
+                <td>{{ view.reindex_result.elapsed_ms }} мс</td>
+                <td>{{ view.reindex_result.payload.collection }}</td>
+                <td>{{ view.reindex_result.payload.model }}</td>
+                <td>{{ view.reindex_result.payload.sources_count }}</td>
+                <td>{{ view.reindex_result.payload.chunks_count }}</td>
+                <td>{{ view.reindex_result.payload.elapsed_sec }} сек</td>
+                <td>{{ view.reindex_result.error or '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
       </section>
 
       <section class="two-column">
@@ -103,6 +147,82 @@
 
       <section class="panel">
         <div class="panel-header">
+          <h2>Все карточки Source Selector</h2>
+          <span class="small-muted">
+            {{ view.source_cards_status.sources_count }} карточек · {{ view.source_cards_status.chunks_count }} chunks · {{ view.source_cards_status.cards_path }}
+          </span>
+        </div>
+
+        {% if view.source_cards_status.error %}
+        <p class="empty">Ошибка чтения карточек: {{ view.source_cards_status.error }}</p>
+        {% endif %}
+
+        {% if view.source_cards %}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>source_id</th>
+                <th>Название</th>
+                <th>Тип</th>
+                <th>Group</th>
+                <th>Enabled</th>
+                <th>Plan</th>
+                <th>Route / Analyzer</th>
+                <th>Sources</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for card in view.source_cards %}
+              <tr>
+                <td>{{ card.source_id }}</td>
+                <td>{{ card.title }}</td>
+                <td>{{ card.card_kind }}</td>
+                <td>{{ card.group }}</td>
+                <td>{{ card.enabled }}</td>
+                <td>{{ card.plan_type }}</td>
+                <td>{{ card.route_id or card.analyzer_id or '—' }}</td>
+                <td>
+                  <div>required: {{ (card.required_sources or []) | join(', ') }}</div>
+                  {% if card.optional_sources %}<div class="small-muted">optional: {{ card.optional_sources | join(', ') }}</div>{% endif %}
+                </td>
+              </tr>
+              <tr>
+                <td colspan="8">
+                  <details>
+                    <summary>Текст карточки и примеры</summary>
+                    <div class="list">
+                      <div class="list-row info-row">
+                        <strong>short</strong>
+                        <span>{{ card.short or '—' }}</span>
+                      </div>
+                      <div class="list-row info-row">
+                        <strong>positive_examples</strong>
+                        <span>{{ (card.positive_examples or []) | join(' · ') }}</span>
+                      </div>
+                      <div class="list-row warning-row">
+                        <strong>negative_examples</strong>
+                        <span>{{ (card.negative_examples or []) | join(' · ') }}</span>
+                      </div>
+                      <div class="list-row info-row">
+                        <strong>output_shape</strong>
+                        <span>{{ (card.output_shape or []) | join(' · ') }}</span>
+                      </div>
+                    </div>
+                  </details>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <p class="empty">Карточки не получены от retrieval-service.</p>
+        {% endif %}
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
           <h2>Route-card проверки</h2>
           <span class="small-muted">через /debug/planner/route-shortcut</span>
         </div>
@@ -126,11 +246,7 @@
               <tr>
                 <td>{{ probe.question }}</td>
                 <td>{{ probe.expected }}</td>
-                <td>
-                  <span class="table-status {{ 'ok' if probe.ok else 'bad' }}">
-                    {{ 'ok' if probe.ok else 'error' }}
-                  </span>
-                </td>
+                <td><span class="table-status {{ 'ok' if probe.ok else 'bad' }}">{{ 'ok' if probe.ok else 'error' }}</span></td>
                 <td>{{ probe.route_id }}</td>
                 <td>{{ probe.plan_type }}</td>
                 <td>{{ probe.best_positive_score }}</td>
@@ -141,110 +257,6 @@
               {% endfor %}
             </tbody>
           </table>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-header">
-          <h2>Карточки Source Selector</h2>
-          <span class="small-muted">top candidates по проверочным фразам</span>
-        </div>
-
-        {% for probe in view.probes %}
-        <article class="list-row info-row" style="margin-bottom: 12px;">
-          <strong>{{ probe.question }}</strong>
-          <span>collection={{ probe.collection }} · model={{ probe.model }} · source selector {{ probe.source_selector_elapsed_ms }} мс</span>
-        </article>
-
-        {% if probe.source_candidates %}
-        <div class="table-wrap" style="margin-bottom: 18px;">
-          <table>
-            <thead>
-              <tr>
-                <th>source_id</th>
-                <th>Название</th>
-                <th>Тип</th>
-                <th>Group</th>
-                <th>Plan</th>
-                <th>Route</th>
-                <th>Analyzer</th>
-                <th>Score</th>
-                <th>Sources</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for card in probe.source_candidates %}
-              <tr>
-                <td>{{ card.source_id }}</td>
-                <td>{{ card.title }}</td>
-                <td>{{ card.card_kind }}</td>
-                <td>{{ card.group }}</td>
-                <td>{{ card.plan_type }}</td>
-                <td>{{ card.route_id }}</td>
-                <td>{{ card.analyzer_id }}</td>
-                <td>{{ card.score }}</td>
-                <td>
-                  <div>required: {{ card.required_sources | join(', ') }}</div>
-                  {% if card.optional_sources %}<div class="small-muted">optional: {{ card.optional_sources | join(', ') }}</div>{% endif %}
-                </td>
-              </tr>
-              <tr>
-                <td colspan="9">
-                  <details>
-                    <summary>matched chunks</summary>
-                    <div class="table-wrap">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Тип</th>
-                            <th>Score</th>
-                            <th>Weighted</th>
-                            <th>Текст</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {% for chunk in card.matched_chunks %}
-                          <tr>
-                            <td>{{ chunk.chunk_type }}</td>
-                            <td>{{ chunk.score }}</td>
-                            <td>{{ chunk.weighted }}</td>
-                            <td>{{ chunk.text }}</td>
-                          </tr>
-                          {% endfor %}
-                        </tbody>
-                      </table>
-                    </div>
-                  </details>
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% else %}
-        <p class="empty">Source Selector не вернул карточки для этой проверки.</p>
-        {% endif %}
-        {% endfor %}
-      </section>
-
-      <section class="panel">
-        <div class="panel-header">
-          <h2>Пояснение</h2>
-          <span class="small-muted">как читать этот раздел</span>
-        </div>
-        <div class="list">
-          <div class="list-row info-row">
-            <strong>Qdrant</strong>
-            <span>Хранит карточки источников и примеры фраз. HDC не обращается к нему напрямую и не требует Qdrant API key.</span>
-          </div>
-          <div class="list-row info-row">
-            <strong>Source Selector</strong>
-            <span>Ищет подходящую карточку и возвращает поля route/analyzer. Проверки выше показывают, проходит ли точное совпадение и отсекается ли слабое.</span>
-          </div>
-          <div class="list-row warning-row">
-            <strong>Безопасность</strong>
-            <span>Проверки read-only: они не выполняют действий в Home Assistant и не запускают Action Executor.</span>
-          </div>
         </div>
       </section>
 
