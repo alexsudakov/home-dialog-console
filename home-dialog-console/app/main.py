@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.25"
+APP_VERSION = "0.1.26"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 BASE_DIR = Path(__file__).resolve().parent
@@ -46,7 +46,7 @@ def nav_items(active: str = "overview") -> list[dict[str, Any]]:
         {"id": "overview", "title": "Обзор", "href": ".", "active": active == "overview", "disabled": False},
         {"id": "regression", "title": "Тесты", "href": "regression", "active": active == "regression", "disabled": False},
         {"id": "environment", "title": "Окружение", "href": "environment", "active": active == "environment", "disabled": False},
-        {"id": "qdrant", "title": "Qdrant", "href": "#qdrant", "active": active == "qdrant", "disabled": True},
+        {"id": "qdrant", "title": "Qdrant", "href": "qdrant", "active": active == "qdrant", "disabled": False},
         {"id": "prompts", "title": "Промты", "href": "#prompts", "active": active == "prompts", "disabled": True},
         {"id": "analyzers", "title": "Анализаторы", "href": "#analyzers", "active": active == "analyzers", "disabled": True},
         {"id": "actions", "title": "Действия", "href": "#actions", "active": active == "actions", "disabled": True},
@@ -380,6 +380,141 @@ def build_environment_view() -> dict[str, Any]:
     }
 
 
+def compact_details(details: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for key in sorted(details.keys()):
+        value = details.get(key)
+        if value is None:
+            continue
+        if isinstance(value, (dict, list)):
+            value_text = json.dumps(value, ensure_ascii=False)
+        else:
+            value_text = str(value)
+        if len(value_text) > 500:
+            value_text = value_text[:500] + "…"
+        rows.append({"name": key, "value": value_text})
+    return rows
+
+
+def check_card_from_diagnostics(checks: list[dict[str, Any]], check_id: str) -> dict[str, Any]:
+    check = check_by_id(checks).get(check_id) or {}
+    details = check.get("details") if isinstance(check.get("details"), dict) else {}
+    return {
+        "id": check_id,
+        "title": SERVICE_CARD_MAP.get(check_id, {}).get("title", check.get("title", check_id)),
+        "label": status_label(check) if check else "Не найдено",
+        "class": state_class(check) if check else "neutral",
+        "status": check.get("status") or "not_found",
+        "message": check.get("message") or "Проверка не найдена в diagnostics summary.",
+        "details": details,
+        "details_rows": compact_details(details),
+    }
+
+
+async def qdrant_route_probe(dialog_service_url: str, question: str, expected: str) -> dict[str, Any]:
+    url = f"{dialog_service_url}/debug/planner/route-shortcut"
+    ok, status_code, elapsed_ms, payload, error = await post_json(url, {"question": question}, timeout=20.0)
+
+    data = payload if isinstance(payload, dict) else {}
+    accepted = data.get("accepted")
+    reject_reason = data.get("reject_reason")
+    route_id = data.get("route_id")
+    plan_type = data.get("plan_type")
+    best_positive_score = data.get("best_positive_score")
+    candidate_score = data.get("candidate_score")
+
+    expected_ok = False
+    if expected == "accepted":
+        expected_ok = ok and accepted is True
+    elif expected == "rejected":
+        expected_ok = ok and accepted is False
+
+    return {
+        "question": question,
+        "expected": expected,
+        "ok": expected_ok,
+        "transport_ok": ok,
+        "status_code": status_code,
+        "elapsed_ms": elapsed_ms,
+        "accepted": accepted,
+        "reject_reason": reject_reason or "—",
+        "route_id": route_id or "—",
+        "plan_type": plan_type or "—",
+        "best_positive_score": best_positive_score,
+        "candidate_score": candidate_score,
+        "error": error,
+        "raw": data,
+    }
+
+
+async def build_qdrant_view() -> dict[str, Any]:
+    diagnostics = await build_diagnostics()
+    checks = diagnostics.get("checks") or []
+    options = load_options()
+    dialog_service_url = str(options["dialog_service_url"]).rstrip("/")
+
+    qdrant_card = check_card_from_diagnostics(checks, "qdrant")
+    source_selector_card = check_card_from_diagnostics(checks, "source_selector")
+
+    probes = [
+        await qdrant_route_probe(dialog_service_url, "Что с вытяжкой на кухне?", "accepted"),
+        await qdrant_route_probe(dialog_service_url, "Что с вентиляцией на кухне?", "rejected"),
+    ]
+
+    qdrant_details = qdrant_card.get("details") or {}
+    source_details = source_selector_card.get("details") or {}
+
+    collection = (
+        qdrant_details.get("collection")
+        or qdrant_details.get("source_collection")
+        or source_details.get("collection")
+        or source_details.get("source_collection")
+        or "нет данных"
+    )
+
+    model = (
+        source_details.get("model")
+        or source_details.get("embedding_model")
+        or qdrant_details.get("model")
+        or qdrant_details.get("embedding_model")
+        or "нет данных"
+    )
+
+    ok_count = sum(1 for item in [qdrant_card, source_selector_card] if item.get("class") == "ok")
+    probe_ok_count = sum(1 for item in probes if item.get("ok"))
+
+    return {
+        "nav_items": nav_items("qdrant"),
+        "updated_at": format_time(diagnostics.get("generated_at") or datetime.now(timezone.utc).isoformat()),
+        "updated_at_full": format_dt(diagnostics.get("generated_at") or datetime.now(timezone.utc).isoformat()),
+        "summary_tiles": [
+            {"label": "Qdrant", "value": qdrant_card["label"], "hint": qdrant_card["status"]},
+            {"label": "Source Selector", "value": source_selector_card["label"], "hint": source_selector_card["status"]},
+            {"label": "Collection", "value": collection, "hint": "source cards"},
+            {"label": "Probes", "value": f"{probe_ok_count}/2", "hint": "route-card"},
+        ],
+        "cards": [qdrant_card, source_selector_card],
+        "probes": probes,
+        "collection": collection,
+        "model": model,
+        "dialog_service_url": dialog_service_url,
+        "overall": {
+            "class": "ok" if ok_count == 2 and probe_ok_count == 2 else "warning",
+            "title": "Qdrant и Source Selector доступны" if ok_count == 2 and probe_ok_count == 2 else "Есть предупреждения по Qdrant / Source Selector",
+            "description": "Раздел проверяет Qdrant через diagnostics summary и безопасные route-card проверки.",
+            "label": "read-only",
+        },
+        "raw": {
+            "diagnostics": diagnostics,
+            "qdrant": qdrant_card,
+            "source_selector": source_selector_card,
+            "probes": probes,
+            "collection": collection,
+            "model": model,
+        },
+    }
+
+
 def regression_result_view(row: dict[str, Any]) -> dict[str, Any]:
     excerpt = row.get("response_excerpt") if isinstance(row.get("response_excerpt"), dict) else {}
     validated_plan = excerpt.get("validated_plan") if isinstance(excerpt.get("validated_plan"), dict) else {}
@@ -530,6 +665,12 @@ async def index(request: Request) -> HTMLResponse:
 async def environment(request: Request) -> HTMLResponse:
     view = build_environment_view()
     return templates.TemplateResponse(request, "environment.html", {"view": view, "options": view["options"], "hdc_version": APP_VERSION})
+
+
+@app.get("/qdrant", response_class=HTMLResponse)
+async def qdrant(request: Request) -> HTMLResponse:
+    view = await build_qdrant_view()
+    return templates.TemplateResponse(request, "qdrant.html", {"view": view, "hdc_version": APP_VERSION})
 
 
 @app.get("/regression", response_class=HTMLResponse)

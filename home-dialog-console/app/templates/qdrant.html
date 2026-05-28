@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HDC — Qdrant</title>
+  <style>
+{% include "inline.css" %}
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">HDC</div>
+        <div>
+          <div class="brand-title">Home Dialog</div>
+          <div class="brand-subtitle">Console</div>
+        </div>
+      </div>
+      <nav class="nav">
+        {% for item in view.nav_items %}
+        <a class="nav-item {{ 'active' if item.active else '' }} {{ 'disabled' if item.get('disabled') else '' }}" href="{{ item.href }}">{{ item.title }}</a>
+        {% endfor %}
+      </nav>
+      <div class="sidebar-footer">
+        <span>HDC v{{ hdc_version }}</span>
+        <span>Qdrant</span>
+      </div>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Home Dialog Console</p>
+          <h1>Qdrant</h1>
+          <p class="muted">Информация о векторной базе и Source Selector. Раздел не хранит и не показывает Qdrant API key.</p>
+        </div>
+        <div class="topbar-actions">
+          <div class="updated">Обновлено: <strong>{{ view.updated_at }}</strong></div>
+          <button type="button" class="refresh" onclick="window.location.reload()">Обновить</button>
+        </div>
+      </header>
+
+      <section class="status-hero {{ view.overall.class }}">
+        <div>
+          <div class="status-kicker">Read-only</div>
+          <h2>{{ view.overall.title }}</h2>
+          <p>{{ view.overall.description }}</p>
+        </div>
+        <div class="status-pill">{{ view.overall.label }}</div>
+      </section>
+
+      <section class="panel summary-panel">
+        <div class="panel-header">
+          <h2>Кратко</h2>
+          <span class="small-muted">{{ view.updated_at_full }}</span>
+        </div>
+        <div class="summary-tiles">
+          {% for tile in view.summary_tiles %}
+          <div class="summary-tile">
+            <span>{{ tile.label }}</span>
+            <strong>{{ tile.value }}</strong>
+            <small>{{ tile.hint }}</small>
+          </div>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="two-column">
+        {% for card in view.cards %}
+        <article class="panel compact-panel">
+          <div class="panel-header">
+            <h2>{{ card.title }}</h2>
+            <span class="table-status {{ card.class }}">{{ card.label }}</span>
+          </div>
+          {% if card.message %}<p class="muted">{{ card.message }}</p>{% endif %}
+          {% if card.details_rows %}
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Поле</th>
+                  <th>Значение</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in card.details_rows %}
+                <tr>
+                  <td>{{ row.name }}</td>
+                  <td>{{ row.value }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <p class="empty">Подробностей нет в diagnostics summary.</p>
+          {% endif %}
+        </article>
+        {% endfor %}
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Route-card проверки</h2>
+          <span class="small-muted">через /debug/planner/route-shortcut</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Вопрос</th>
+                <th>Ожидание</th>
+                <th>Итог</th>
+                <th>Route</th>
+                <th>Plan</th>
+                <th>Positive</th>
+                <th>Score</th>
+                <th>Причина отказа</th>
+                <th>Время</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for probe in view.probes %}
+              <tr>
+                <td>{{ probe.question }}</td>
+                <td>{{ probe.expected }}</td>
+                <td>
+                  <span class="table-status {{ 'ok' if probe.ok else 'bad' }}">
+                    {{ 'ok' if probe.ok else 'error' }}
+                  </span>
+                </td>
+                <td>{{ probe.route_id }}</td>
+                <td>{{ probe.plan_type }}</td>
+                <td>{{ probe.best_positive_score }}</td>
+                <td>{{ probe.candidate_score }}</td>
+                <td>{{ probe.reject_reason }}</td>
+                <td>{{ probe.elapsed_ms }} мс</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Пояснение</h2>
+          <span class="small-muted">как читать этот раздел</span>
+        </div>
+        <div class="list">
+          <div class="list-row info-row">
+            <strong>Qdrant</strong>
+            <span>Хранит карточки источников и примеры фраз. HDC не обращается к нему напрямую и не требует Qdrant API key.</span>
+          </div>
+          <div class="list-row info-row">
+            <strong>Source Selector</strong>
+            <span>Ищет подходящую карточку и возвращает поля route/analyzer. Проверки выше показывают, проходит ли точное совпадение и отсекается ли слабое.</span>
+          </div>
+          <div class="list-row warning-row">
+            <strong>Безопасность</strong>
+            <span>Проверки read-only: они не выполняют действий в Home Assistant и не запускают Action Executor.</span>
+          </div>
+        </div>
+      </section>
+
+      <details class="raw-details">
+        <summary>Raw Qdrant JSON</summary>
+        <pre>{{ view.raw | tojson(indent=2) }}</pre>
+      </details>
+    </main>
+  </div>
+</body>
+</html>
