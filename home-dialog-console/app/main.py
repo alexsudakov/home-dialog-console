@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.26"
+APP_VERSION = "0.1.27"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 BASE_DIR = Path(__file__).resolve().parent
@@ -399,16 +399,61 @@ def compact_details(details: dict[str, Any]) -> list[dict[str, Any]]:
 def check_card_from_diagnostics(checks: list[dict[str, Any]], check_id: str) -> dict[str, Any]:
     check = check_by_id(checks).get(check_id) or {}
     details = check.get("details") if isinstance(check.get("details"), dict) else {}
+    found = bool(check)
     return {
         "id": check_id,
         "title": SERVICE_CARD_MAP.get(check_id, {}).get("title", check.get("title", check_id)),
-        "label": status_label(check) if check else "Не найдено",
-        "class": state_class(check) if check else "neutral",
+        "label": status_label(check) if found else "Не найдено",
+        "class": state_class(check) if found else "neutral",
         "status": check.get("status") or "not_found",
-        "message": check.get("message") or "Проверка не найдена в diagnostics summary.",
+        "message": check.get("message") or ("" if found else "Проверка не найдена в diagnostics summary."),
         "details": details,
         "details_rows": compact_details(details),
     }
+
+
+def nested_response(details: dict[str, Any]) -> dict[str, Any]:
+    response = details.get("response")
+    return response if isinstance(response, dict) else {}
+
+
+def compact_matched_chunks(candidate: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for chunk in candidate.get("matched_chunks") or []:
+        if not isinstance(chunk, dict):
+            continue
+        rows.append({
+            "chunk_type": chunk.get("chunk_type") or "—",
+            "score": chunk.get("score"),
+            "weighted": chunk.get("weighted"),
+            "text": chunk.get("text") or "",
+        })
+    return rows
+
+
+def compact_source_candidates(data: dict[str, Any]) -> list[dict[str, Any]]:
+    source_selector = data.get("source_selector") if isinstance(data.get("source_selector"), dict) else {}
+    candidates = source_selector.get("candidates") if isinstance(source_selector.get("candidates"), list) else []
+
+    rows: list[dict[str, Any]] = []
+    for candidate in candidates[:5]:
+        if not isinstance(candidate, dict):
+            continue
+        rows.append({
+            "source_id": candidate.get("source_id") or "—",
+            "title": candidate.get("title") or "—",
+            "card_kind": candidate.get("card_kind") or "—",
+            "group": candidate.get("group") or "—",
+            "planner_id": candidate.get("planner_id") or "—",
+            "route_id": candidate.get("route_id") or "—",
+            "analyzer_id": candidate.get("analyzer_id") or "—",
+            "plan_type": candidate.get("plan_type") or "—",
+            "score": candidate.get("score"),
+            "required_sources": candidate.get("required_sources") or [],
+            "optional_sources": candidate.get("optional_sources") or [],
+            "matched_chunks": compact_matched_chunks(candidate),
+        })
+    return rows
 
 
 async def qdrant_route_probe(dialog_service_url: str, question: str, expected: str) -> dict[str, Any]:
@@ -429,6 +474,8 @@ async def qdrant_route_probe(dialog_service_url: str, question: str, expected: s
     elif expected == "rejected":
         expected_ok = ok and accepted is False
 
+    source_selector = data.get("source_selector") if isinstance(data.get("source_selector"), dict) else {}
+
     return {
         "question": question,
         "expected": expected,
@@ -443,6 +490,10 @@ async def qdrant_route_probe(dialog_service_url: str, question: str, expected: s
         "best_positive_score": best_positive_score,
         "candidate_score": candidate_score,
         "error": error,
+        "collection": source_selector.get("collection") or "нет данных",
+        "model": source_selector.get("model") or "нет данных",
+        "source_selector_elapsed_ms": source_selector.get("elapsed_ms"),
+        "source_candidates": compact_source_candidates(data),
         "raw": data,
     }
 
@@ -463,20 +514,28 @@ async def build_qdrant_view() -> dict[str, Any]:
 
     qdrant_details = qdrant_card.get("details") or {}
     source_details = source_selector_card.get("details") or {}
+    source_response = nested_response(source_details)
 
     collection = (
-        qdrant_details.get("collection")
-        or qdrant_details.get("source_collection")
-        or source_details.get("collection")
+        source_response.get("source_collection")
+        or source_response.get("collection")
         or source_details.get("source_collection")
+        or source_details.get("collection")
+        or qdrant_details.get("expected_collection")
+        or qdrant_details.get("source_collection")
+        or qdrant_details.get("collection")
+        or next((probe.get("collection") for probe in probes if probe.get("collection") not in [None, "", "нет данных"]), None)
         or "нет данных"
     )
 
     model = (
-        source_details.get("model")
+        source_response.get("embedding_model")
+        or source_response.get("model")
         or source_details.get("embedding_model")
-        or qdrant_details.get("model")
+        or source_details.get("model")
         or qdrant_details.get("embedding_model")
+        or qdrant_details.get("model")
+        or next((probe.get("model") for probe in probes if probe.get("model") not in [None, "", "нет данных"]), None)
         or "нет данных"
     )
 

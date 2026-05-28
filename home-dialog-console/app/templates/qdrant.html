@@ -146,6 +146,89 @@
 
       <section class="panel">
         <div class="panel-header">
+          <h2>Карточки Source Selector</h2>
+          <span class="small-muted">top candidates по проверочным фразам</span>
+        </div>
+
+        {% for probe in view.probes %}
+        <article class="list-row info-row" style="margin-bottom: 12px;">
+          <strong>{{ probe.question }}</strong>
+          <span>collection={{ probe.collection }} · model={{ probe.model }} · source selector {{ probe.source_selector_elapsed_ms }} мс</span>
+        </article>
+
+        {% if probe.source_candidates %}
+        <div class="table-wrap" style="margin-bottom: 18px;">
+          <table>
+            <thead>
+              <tr>
+                <th>source_id</th>
+                <th>Название</th>
+                <th>Тип</th>
+                <th>Group</th>
+                <th>Plan</th>
+                <th>Route</th>
+                <th>Analyzer</th>
+                <th>Score</th>
+                <th>Sources</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for card in probe.source_candidates %}
+              <tr>
+                <td>{{ card.source_id }}</td>
+                <td>{{ card.title }}</td>
+                <td>{{ card.card_kind }}</td>
+                <td>{{ card.group }}</td>
+                <td>{{ card.plan_type }}</td>
+                <td>{{ card.route_id }}</td>
+                <td>{{ card.analyzer_id }}</td>
+                <td>{{ card.score }}</td>
+                <td>
+                  <div>required: {{ card.required_sources | join(', ') }}</div>
+                  {% if card.optional_sources %}<div class="small-muted">optional: {{ card.optional_sources | join(', ') }}</div>{% endif %}
+                </td>
+              </tr>
+              <tr>
+                <td colspan="9">
+                  <details>
+                    <summary>matched chunks</summary>
+                    <div class="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Тип</th>
+                            <th>Score</th>
+                            <th>Weighted</th>
+                            <th>Текст</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {% for chunk in card.matched_chunks %}
+                          <tr>
+                            <td>{{ chunk.chunk_type }}</td>
+                            <td>{{ chunk.score }}</td>
+                            <td>{{ chunk.weighted }}</td>
+                            <td>{{ chunk.text }}</td>
+                          </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                  </details>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <p class="empty">Source Selector не вернул карточки для этой проверки.</p>
+        {% endif %}
+        {% endfor %}
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
           <h2>Пояснение</h2>
           <span class="small-muted">как читать этот раздел</span>
         </div>
