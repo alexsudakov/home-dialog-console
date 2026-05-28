@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+import platform
+import socket
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,7 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.24"
+APP_VERSION = "0.1.25"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 BASE_DIR = Path(__file__).resolve().parent
@@ -42,7 +45,7 @@ def nav_items(active: str = "overview") -> list[dict[str, Any]]:
     return [
         {"id": "overview", "title": "Обзор", "href": ".", "active": active == "overview", "disabled": False},
         {"id": "regression", "title": "Тесты", "href": "regression", "active": active == "regression", "disabled": False},
-        {"id": "environment", "title": "Окружение", "href": "#environment", "active": active == "environment", "disabled": True},
+        {"id": "environment", "title": "Окружение", "href": "environment", "active": active == "environment", "disabled": False},
         {"id": "qdrant", "title": "Qdrant", "href": "#qdrant", "active": active == "qdrant", "disabled": True},
         {"id": "prompts", "title": "Промты", "href": "#prompts", "active": active == "prompts", "disabled": True},
         {"id": "analyzers", "title": "Анализаторы", "href": "#analyzers", "active": active == "analyzers", "disabled": True},
@@ -269,6 +272,114 @@ def build_view_model(diagnostics: dict[str, Any]) -> dict[str, Any]:
     return {"nav_items": nav_items("overview"), "overall": overall, "updated_at": format_time(diagnostics.get("generated_at")), "updated_at_full": format_dt(diagnostics.get("generated_at")), "service_cards": build_service_cards(checks), "summary_tiles": build_summary_tiles(diagnostics, recommendations_visible), "snapshot": build_snapshot(checks), "dependency_rows": build_dependency_rows(checks, recommendations_visible), "incidents": incidents, "recommendations": recommendations_visible, "recommendations_empty_text": "Действий не требуется: все диагностические проверки зелёные.", "action_blocks": diagnostics.get("action_blocks") or [], "checks": checks, "raw": diagnostics}
 
 
+def path_state(path: Path) -> str:
+    try:
+        if path.exists():
+            return "есть"
+        return "нет"
+    except Exception:
+        return "нет данных"
+
+
+def build_environment_view() -> dict[str, Any]:
+    options = load_options()
+    dialog_service_url = str(options.get("dialog_service_url") or DEFAULT_DIALOG_SERVICE_URL)
+    now_utc = datetime.now(timezone.utc)
+    local_now = datetime.now().astimezone()
+
+    python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+
+    try:
+        hostname = socket.gethostname()
+    except Exception:
+        hostname = "нет данных"
+
+    try:
+        cwd = str(Path.cwd())
+    except Exception:
+        cwd = "нет данных"
+
+    sections = [
+        {
+            "title": "HDC add-on",
+            "description": "Локальное окружение панели управления.",
+            "rows": [
+                {"name": "Версия HDC", "value": APP_VERSION, "hint": "версия кода add-on"},
+                {"name": "Режим", "value": "read-only", "hint": "страница не выполняет действий в Home Assistant"},
+                {"name": "Hostname", "value": hostname, "hint": "имя контейнера"},
+                {"name": "Рабочий каталог", "value": cwd, "hint": "текущий каталог процесса"},
+                {"name": "Каталог приложения", "value": str(BASE_DIR), "hint": "путь до app"},
+            ],
+        },
+        {
+            "title": "Python runtime",
+            "description": "Версия Python и базовая информация о платформе.",
+            "rows": [
+                {"name": "Python", "value": python_version, "hint": "версия интерпретатора"},
+                {"name": "Implementation", "value": platform.python_implementation(), "hint": "реализация Python"},
+                {"name": "Platform", "value": platform.platform(), "hint": "платформа контейнера"},
+                {"name": "Machine", "value": platform.machine(), "hint": "архитектура"},
+            ],
+        },
+        {
+            "title": "Настройки add-on",
+            "description": "Публичные настройки без секретов и токенов.",
+            "rows": [
+                {"name": "dialog-service URL", "value": dialog_service_url, "hint": "адрес, настроенный в options"},
+                {"name": "log_level", "value": str(options.get("log_level") or "info"), "hint": "уровень логирования"},
+                {"name": "options.json", "value": str(CONFIG_PATH), "hint": f"файл: {path_state(CONFIG_PATH)}"},
+                {"name": "DEFAULT_DIALOG_SERVICE_URL", "value": DEFAULT_DIALOG_SERVICE_URL, "hint": "значение по умолчанию"},
+            ],
+        },
+        {
+            "title": "Время контейнера",
+            "description": "Базовая информация о времени HDC. Проверка NTP для CT101/HA будет отдельной задачей.",
+            "rows": [
+                {"name": "UTC", "value": now_utc.isoformat(), "hint": "текущее UTC-время HDC"},
+                {"name": "Local", "value": local_now.isoformat(), "hint": "локальное время контейнера"},
+                {"name": "NTP status", "value": "не проверяется", "hint": "пока только отображение времени контейнера"},
+            ],
+        },
+        {
+            "title": "Безопасность отображения",
+            "description": "Этот экран не должен раскрывать секреты.",
+            "rows": [
+                {"name": "Секреты", "value": "не выводятся", "hint": "токены, пароли и ключи не показываются"},
+                {"name": "Действия HA", "value": "не выполняются", "hint": "экран только читает локальные сведения HDC"},
+                {"name": "Health-проверки", "value": "на главной странице", "hint": "раздел не дублирует диагностику сервисов"},
+            ],
+        },
+    ]
+
+    return {
+        "nav_items": nav_items("environment"),
+        "updated_at": format_time(now_utc.isoformat()),
+        "updated_at_full": format_dt(now_utc.isoformat()),
+        "summary_tiles": [
+            {"label": "HDC", "value": APP_VERSION, "hint": "версия"},
+            {"label": "Python", "value": python_version, "hint": "runtime"},
+            {"label": "Config", "value": path_state(CONFIG_PATH), "hint": "options.json"},
+            {"label": "Mode", "value": "read-only", "hint": "без действий"},
+        ],
+        "sections": sections,
+        "options": public_options(options),
+        "raw": {
+            "app_version": APP_VERSION,
+            "hostname": hostname,
+            "python_version": python_version,
+            "platform": platform.platform(),
+            "machine": platform.machine(),
+            "base_dir": str(BASE_DIR),
+            "config_path": str(CONFIG_PATH),
+            "config_exists": CONFIG_PATH.exists(),
+            "dialog_service_url": dialog_service_url,
+            "log_level": options.get("log_level"),
+            "utc_now": now_utc.isoformat(),
+            "local_now": local_now.isoformat(),
+        },
+    }
+
+
 def regression_result_view(row: dict[str, Any]) -> dict[str, Any]:
     excerpt = row.get("response_excerpt") if isinstance(row.get("response_excerpt"), dict) else {}
     validated_plan = excerpt.get("validated_plan") if isinstance(excerpt.get("validated_plan"), dict) else {}
@@ -413,6 +524,12 @@ async def index(request: Request) -> HTMLResponse:
     diagnostics = await build_diagnostics()
     view = build_view_model(diagnostics)
     return templates.TemplateResponse(request, "index.html", {"diagnostics": diagnostics, "view": view, "options": diagnostics["options"]})
+
+
+@app.get("/environment", response_class=HTMLResponse)
+async def environment(request: Request) -> HTMLResponse:
+    view = build_environment_view()
+    return templates.TemplateResponse(request, "environment.html", {"view": view, "options": view["options"], "hdc_version": APP_VERSION})
 
 
 @app.get("/regression", response_class=HTMLResponse)
