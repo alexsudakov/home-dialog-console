@@ -160,6 +160,28 @@
       </section>
       {% endif %}
 
+      {% if view.delete_result %}
+      <section class="status-hero {{ 'ok' if view.delete_result.ok else 'bad' }}">
+        <div>
+          <div class="status-kicker">Delete result</div>
+          <h2>
+            {% if view.delete_result.ok %}
+              Карточка удалена
+            {% elif view.delete_result.blocked %}
+              Удаление заблокировано
+            {% else %}
+              Ошибка удаления карточки
+            {% endif %}
+          </h2>
+          <p>HTTP {{ view.delete_result.status_code or '—' }} · {{ view.delete_result.elapsed_ms }} мс{% if view.delete_result.error %} · {{ view.delete_result.error }}{% endif %}</p>
+          {% if view.delete_result.ok %}
+          <p><a class="refresh" href="qdrant">Вернуться к Qdrant</a></p>
+          {% endif %}
+        </div>
+        <div class="status-pill">{{ 'ok' if view.delete_result.ok else 'error' }}</div>
+      </section>
+      {% endif %}
+
       {% if view.error %}
       <section class="status-hero bad">
         <div>
@@ -179,8 +201,10 @@
         </div>
 
         <div class="hint-box">
-          Это пока безопасный режим просмотра: поля уже выглядят как форма редактирования, но кнопки сохранения отключены.
-          Следующим шагом добавим сохранение в SQLite через retrieval-service.
+          Карточка редактируется в SQLite через retrieval-service.
+          {% if view.protected %}
+          <br><strong>Системная карточка защищена от удаления.</strong> Её можно редактировать, включать и отключать.
+          {% endif %}
         </div>
 
         <form method="post" action="qdrant/cards/{{ view.source_id }}/save">
@@ -294,8 +318,13 @@
             <input type="hidden" name="enabled" value="{{ 'true' if view.source.enabled else 'false' }}">
             <button class="refresh" type="submit">{{ 'Отключить карточку' if view.source.enabled else 'Включить карточку' }}</button>
           </form>
-          </div>
-        </form>
+
+          {% if not view.protected %}
+          <form method="post" action="qdrant/cards/{{ view.source_id }}/delete" onsubmit="return confirm('Удалить карточку {{ view.source_id }}? Это действие нельзя отменить. После удаления нужно переиндексировать Qdrant.');">
+            <button class="refresh" type="submit">Удалить карточку</button>
+          </form>
+          {% endif %}
+        </div>
       </section>
 
       <details class="raw-details">

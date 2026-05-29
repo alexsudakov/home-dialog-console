@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.33"
+APP_VERSION = "0.1.34"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 DEFAULT_RETRIEVAL_SERVICE_URL = "http://192.168.1.138:8085"
@@ -41,6 +41,29 @@ SERVICE_CARD_MAP: dict[str, dict[str, str]] = {
 
 PRIMARY_SERVICE_IDS = ["dialog_service", "planner_llama", "telegram_runner", "ha_api", "source_selector", "qdrant", "llm_log_helper", "redis"]
 DEPENDENCY_IDS = ["redis", "ha_api", "telegram_runner", "planner_llama", "source_selector", "qdrant", "llm_log_helper", "ollama", "config_db", "action_executor", "system_runtime_snapshot"]
+
+PROTECTED_SOURCE_CARD_IDS = {
+    "state_query",
+    "system_health_summary",
+    "house_events_summary",
+    "people_history",
+    "kitchen_hood_reasoning",
+    "toilet_light_delay",
+    "entity_inventory_query",
+}
+
+
+def is_protected_source_card(source_id: str, source: dict[str, Any] | None = None) -> bool:
+    source = source or {}
+    sid = str(source.get("source_id") or source_id)
+    if sid in PROTECTED_SOURCE_CARD_IDS:
+        return True
+
+    # Временная защита до появления явного поля protected=true в карточке.
+    if source.get("protected") is True:
+        return True
+
+    return False
 
 
 def nav_items(active: str = "overview") -> list[dict[str, Any]]:
@@ -133,6 +156,22 @@ async def put_json(url: str, payload: dict[str, Any] | None = None, timeout: flo
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.put(url, json=payload or {})
+        elapsed_ms = round((time.perf_counter() - started) * 1000)
+        try:
+            data: Any = response.json()
+        except Exception:
+            data = response.text[:2000]
+        return 200 <= response.status_code < 300, response.status_code, elapsed_ms, data, ""
+    except Exception as exc:
+        elapsed_ms = round((time.perf_counter() - started) * 1000)
+        return False, None, elapsed_ms, None, f"{type(exc).__name__}: {exc or 'no details'}"
+
+
+async def delete_json(url: str, timeout: float = 90.0) -> tuple[bool, int | None, int, Any, str]:
+    started = time.perf_counter()
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.delete(url)
         elapsed_ms = round((time.perf_counter() - started) * 1000)
         try:
             data: Any = response.json()
@@ -874,6 +913,8 @@ async def qdrant_card_view(request: Request, source_id: str) -> HTMLResponse:
         "save_result": None,
         "reindex_result": None,
         "toggle_result": None,
+        "delete_result": None,
+        "protected": is_protected_source_card(source_id, source),
         "retrieval_service_url": retrieval_service_url,
         "updated_at": format_time(datetime.now(timezone.utc).isoformat()),
         "updated_at_full": format_dt(datetime.now(timezone.utc).isoformat()),
@@ -937,6 +978,8 @@ async def qdrant_card_save(request: Request, source_id: str) -> HTMLResponse:
         },
         "reindex_result": reindex_result,
         "toggle_result": None,
+        "delete_result": None,
+        "protected": is_protected_source_card(source_id, source),
         "retrieval_service_url": retrieval_service_url,
         "updated_at": format_time(datetime.now(timezone.utc).isoformat()),
         "updated_at_full": format_dt(datetime.now(timezone.utc).isoformat()),
@@ -987,6 +1030,75 @@ async def qdrant_card_toggle(request: Request, source_id: str) -> HTMLResponse:
             "action": endpoint,
             "error": error or "",
         },
+        "delete_result": None,
+        "protected": is_protected_source_card(source_id, source),
+        "retrieval_service_url": retrieval_service_url,
+        "updated_at": format_time(datetime.now(timezone.utc).isoformat()),
+        "updated_at_full": format_dt(datetime.now(timezone.utc).isoformat()),
+    }
+
+    return templates.TemplateResponse(
+        request,
+        "qdrant_card.html",
+        {"view": view, "hdc_version": APP_VERSION},
+    )
+
+
+@app.post("/qdrant/cards/{source_id}/delete", response_class=HTMLResponse)
+async def qdrant_card_delete(request: Request, source_id: str) -> HTMLResponse:
+    options = load_options()
+    retrieval_service_url = str(options["retrieval_service_url"]).rstrip("/")
+
+    read_ok, read_status_code, read_elapsed_ms, read_payload, read_error = await get_json(
+        f"{retrieval_service_url}/source/cards/{source_id}",
+        timeout=20.0,
+    )
+
+    read_data = read_payload if isinstance(read_payload, dict) else {}
+    source = read_data.get("source") if isinstance(read_data.get("source"), dict) else {}
+
+    delete_result = {
+        "ok": False,
+        "status_code": read_status_code,
+        "elapsed_ms": read_elapsed_ms,
+        "error": read_error or "",
+        "blocked": False,
+    }
+
+    if not read_ok or not source:
+        delete_result["error"] = read_error or "Карточка не найдена."
+    elif is_protected_source_card(source_id, source):
+        delete_result["blocked"] = True
+        delete_result["error"] = "Системную карточку нельзя удалить. Можно только включить или отключить."
+    else:
+        ok, status_code, elapsed_ms, payload, error = await delete_json(
+            f"{retrieval_service_url}/source/cards/{source_id}",
+            timeout=30.0,
+        )
+        data = payload if isinstance(payload, dict) else {}
+        delete_result = {
+            "ok": ok and bool(data.get("ok", ok)),
+            "status_code": status_code,
+            "elapsed_ms": elapsed_ms,
+            "error": error or (data.get("detail") if isinstance(data, dict) else "") or "",
+            "blocked": False,
+        }
+        if delete_result["ok"]:
+            source = {}
+
+    view = {
+        "nav_items": nav_items("qdrant"),
+        "source_id": source_id,
+        "source": source,
+        "ok": read_ok and bool(read_data.get("ok", read_ok)),
+        "status_code": read_status_code,
+        "elapsed_ms": read_elapsed_ms,
+        "error": "",
+        "save_result": None,
+        "reindex_result": None,
+        "toggle_result": None,
+        "delete_result": delete_result,
+        "protected": is_protected_source_card(source_id, source),
         "retrieval_service_url": retrieval_service_url,
         "updated_at": format_time(datetime.now(timezone.utc).isoformat()),
         "updated_at_full": format_dt(datetime.now(timezone.utc).isoformat()),
