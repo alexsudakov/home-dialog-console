@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.34"
+APP_VERSION = "0.1.35"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 DEFAULT_RETRIEVAL_SERVICE_URL = "http://192.168.1.138:8085"
@@ -505,6 +505,62 @@ def compact_details(details: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+def audit_change_summary(item: dict[str, Any]) -> str:
+    before = item.get("before") if isinstance(item.get("before"), dict) else {}
+    after = item.get("after") if isinstance(item.get("after"), dict) else {}
+
+    if item.get("action") == "delete":
+        title = before.get("title") or before.get("source_id") or ""
+        return f"Удалена карточка: {title}" if title else "Карточка удалена."
+
+    if item.get("action") == "create":
+        title = after.get("title") or after.get("source_id") or ""
+        return f"Создана карточка: {title}" if title else "Карточка создана."
+
+    changed: list[str] = []
+    for field in ("enabled", "title", "short", "full", "card_kind", "route_id", "analyzer_id", "plan_type"):
+        if before.get(field) != after.get(field):
+            changed.append(field)
+
+    for field in ("positive_examples", "negative_examples", "required_sources", "optional_sources", "output_shape", "selected_analyzers"):
+        if before.get(field) != after.get(field):
+            changed.append(field)
+
+    if changed:
+        return "Изменены поля: " + ", ".join(changed[:8])
+
+    return "Изменение записано."
+
+
+async def fetch_source_card_audit(retrieval_service_url: str, source_id: str, limit: int = 10) -> dict[str, Any]:
+    ok, status_code, elapsed_ms, payload, error = await get_json(
+        f"{retrieval_service_url}/source/cards/{source_id}/audit?limit={limit}",
+        timeout=20.0,
+    )
+
+    data = payload if isinstance(payload, dict) else {}
+    raw_items = data.get("items") if isinstance(data.get("items"), list) else []
+    items: list[dict[str, Any]] = []
+
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        row = dict(item)
+        row["created_at_display"] = format_dt(row.get("created_at"))
+        row["summary"] = audit_change_summary(row)
+        items.append(row)
+
+    return {
+        "ok": ok and bool(data.get("ok", ok)),
+        "status_code": status_code,
+        "elapsed_ms": elapsed_ms,
+        "error": error or (data.get("detail") if isinstance(data, dict) else "") or data.get("error") or "",
+        "source_id": data.get("source_id") or source_id,
+        "limit": data.get("limit") or limit,
+        "items": items,
+    }
+
+
 def check_card_from_diagnostics(checks: list[dict[str, Any]], check_id: str) -> dict[str, Any]:
     check = check_by_id(checks).get(check_id) or {}
     details = check.get("details") if isinstance(check.get("details"), dict) else {}
@@ -914,6 +970,7 @@ async def qdrant_card_view(request: Request, source_id: str) -> HTMLResponse:
         "reindex_result": None,
         "toggle_result": None,
         "delete_result": None,
+        "audit": await fetch_source_card_audit(retrieval_service_url, source_id),
         "protected": is_protected_source_card(source_id, source),
         "retrieval_service_url": retrieval_service_url,
         "updated_at": format_time(datetime.now(timezone.utc).isoformat()),
@@ -979,6 +1036,7 @@ async def qdrant_card_save(request: Request, source_id: str) -> HTMLResponse:
         "reindex_result": reindex_result,
         "toggle_result": None,
         "delete_result": None,
+        "audit": await fetch_source_card_audit(retrieval_service_url, source_id),
         "protected": is_protected_source_card(source_id, source),
         "retrieval_service_url": retrieval_service_url,
         "updated_at": format_time(datetime.now(timezone.utc).isoformat()),
@@ -1031,6 +1089,7 @@ async def qdrant_card_toggle(request: Request, source_id: str) -> HTMLResponse:
             "error": error or "",
         },
         "delete_result": None,
+        "audit": await fetch_source_card_audit(retrieval_service_url, source_id),
         "protected": is_protected_source_card(source_id, source),
         "retrieval_service_url": retrieval_service_url,
         "updated_at": format_time(datetime.now(timezone.utc).isoformat()),
@@ -1098,6 +1157,7 @@ async def qdrant_card_delete(request: Request, source_id: str) -> HTMLResponse:
         "reindex_result": None,
         "toggle_result": None,
         "delete_result": delete_result,
+        "audit": await fetch_source_card_audit(retrieval_service_url, source_id),
         "protected": is_protected_source_card(source_id, source),
         "retrieval_service_url": retrieval_service_url,
         "updated_at": format_time(datetime.now(timezone.utc).isoformat()),

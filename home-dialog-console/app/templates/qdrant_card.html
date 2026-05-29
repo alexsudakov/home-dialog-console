@@ -327,6 +327,44 @@
         </div>
       </section>
 
+      <section class="panel">
+        <div class="panel-header">
+          <h2>История изменений карточки</h2>
+          <span class="small-muted">
+            {% if view.audit %}
+              HTTP {{ view.audit.status_code or '—' }} · {{ view.audit.elapsed_ms }} мс
+            {% else %}
+              нет данных
+            {% endif %}
+          </span>
+        </div>
+
+        {% if view.audit and view.audit.error %}
+        <p class="empty">Ошибка чтения audit: {{ view.audit.error }}</p>
+        {% elif view.audit and view.audit.items %}
+        <table>
+          <thead>
+            <tr>
+              <th>Время</th>
+              <th>Действие</th>
+              <th>Кратко</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in view.audit.items %}
+            <tr>
+              <td>{{ item.created_at_display }}</td>
+              <td>{{ item.action }}</td>
+              <td>{{ item.summary }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="empty">История изменений по этой карточке пока пустая.</p>
+        {% endif %}
+      </section>
+
       <details class="raw-details">
         <summary>Raw card JSON</summary>
         <pre>{{ view.source | tojson(indent=2) }}</pre>
