@@ -7,6 +7,7 @@ import platform
 import socket
 import sys
 import time
+from urllib.parse import parse_qs
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -887,7 +888,9 @@ async def qdrant_card_view(request: Request, source_id: str) -> HTMLResponse:
 async def qdrant_card_save(request: Request, source_id: str) -> HTMLResponse:
     options = load_options()
     retrieval_service_url = str(options["retrieval_service_url"]).rstrip("/")
-    form = await request.form()
+    body = await request.body()
+    parsed_form = parse_qs(body.decode("utf-8"), keep_blank_values=True)
+    form = {key: values[-1] if values else "" for key, values in parsed_form.items()}
     card_payload = source_card_form_payload(form, source_id)
 
     ok, status_code, elapsed_ms, payload, error = await put_json(
