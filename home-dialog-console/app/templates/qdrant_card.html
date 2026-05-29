@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HDC — карточка {{ view.source_id }}</title>
+  <style>
+{% include "inline.css" %}
+    .kv-table td:first-child {
+      width: 220px;
+      color: var(--muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 13px;
+    }
+    .pre-wrap {
+      white-space: pre-wrap;
+      line-height: 1.45;
+    }
+    .list-block {
+      margin: 8px 0 0 18px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">HDC</div>
+        <div>
+          <div class="brand-title">Home Dialog</div>
+          <div class="brand-subtitle">Console</div>
+        </div>
+      </div>
+      <nav class="nav">
+        {% for item in view.nav_items %}
+        <a class="nav-item {{ 'active' if item.active else '' }} {{ 'disabled' if item.get('disabled') else '' }}" href="../../{{ item.href }}">{{ item.title }}</a>
+        {% endfor %}
+      </nav>
+      <div class="sidebar-footer">
+        <span>HDC v{{ hdc_version }}</span>
+        <span>Qdrant</span>
+      </div>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Source Selector card</p>
+          <h1>{{ view.source.title or view.source_id }}</h1>
+          <p class="muted">{{ view.source_id }} · {{ view.retrieval_service_url }}</p>
+        </div>
+        <div class="topbar-actions">
+          <a class="refresh" href="../../qdrant">Назад к Qdrant</a>
+        </div>
+      </header>
+
+      {% if view.error %}
+      <section class="status-hero bad">
+        <div>
+          <div class="status-kicker">Error</div>
+          <h2>Ошибка чтения карточки</h2>
+          <p>{{ view.error }}</p>
+        </div>
+        <div class="status-pill">error</div>
+      </section>
+      {% endif %}
+
+      {% if view.source %}
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Карточка</h2>
+          <span class="small-muted">HTTP {{ view.status_code }} · {{ view.elapsed_ms }} мс</span>
+        </div>
+
+        <div class="table-wrap">
+          <table class="kv-table">
+            <tbody>
+              <tr><td>source_id</td><td>{{ view.source.source_id }}</td></tr>
+              <tr><td>enabled</td><td>{{ view.source.enabled }}</td></tr>
+              <tr><td>group</td><td>{{ view.source.group or '—' }}</td></tr>
+              <tr><td>card_kind</td><td>{{ view.source.card_kind or '—' }}</td></tr>
+              <tr><td>planner_id</td><td>{{ view.source.planner_id or '—' }}</td></tr>
+              <tr><td>route_id</td><td>{{ view.source.route_id or '—' }}</td></tr>
+              <tr><td>analyzer_id</td><td>{{ view.source.analyzer_id or '—' }}</td></tr>
+              <tr><td>plan_type</td><td>{{ view.source.plan_type or '—' }}</td></tr>
+              <tr><td>required_sources</td><td>{{ (view.source.required_sources or []) | join(', ') if view.source.required_sources else '—' }}</td></tr>
+              <tr><td>optional_sources</td><td>{{ (view.source.optional_sources or []) | join(', ') if view.source.optional_sources else '—' }}</td></tr>
+              <tr><td>created_at</td><td>{{ view.source.created_at or '—' }}</td></tr>
+              <tr><td>updated_at</td><td>{{ view.source.updated_at or '—' }}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Краткое описание</h2>
+        <div class="pre-wrap">{{ view.source.short or '—' }}</div>
+      </section>
+
+      <section class="panel">
+        <h2>Полное описание</h2>
+        <div class="pre-wrap">{{ view.source.full or '—' }}</div>
+      </section>
+
+      <section class="two-column">
+        <article class="panel compact-panel">
+          <h2>Положительные примеры</h2>
+          {% if view.source.positive_examples %}
+          <ul class="list-block">
+            {% for item in view.source.positive_examples %}
+            <li>{{ item }}</li>
+            {% endfor %}
+          </ul>
+          {% else %}
+          <p class="empty">Нет примеров.</p>
+          {% endif %}
+        </article>
+
+        <article class="panel compact-panel">
+          <h2>Отрицательные примеры</h2>
+          {% if view.source.negative_examples %}
+          <ul class="list-block">
+            {% for item in view.source.negative_examples %}
+            <li>{{ item }}</li>
+            {% endfor %}
+          </ul>
+          {% else %}
+          <p class="empty">Нет примеров.</p>
+          {% endif %}
+        </article>
+      </section>
+
+      <details class="raw-details">
+        <summary>Raw card JSON</summary>
+        <pre>{{ view.source | tojson(indent=2) }}</pre>
+      </details>
+      {% else %}
+      <section class="panel">
+        <p class="empty">Карточка не найдена.</p>
+      </section>
+      {% endif %}
+    </main>
+  </div>
+</body>
+</html>

@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.29"
+APP_VERSION = "0.1.30"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 DEFAULT_RETRIEVAL_SERVICE_URL = "http://192.168.1.138:8085"
@@ -791,6 +791,39 @@ async def qdrant_reindex(request: Request) -> HTMLResponse:
     }
     view = await build_qdrant_view(reindex_result=reindex_result)
     return templates.TemplateResponse(request, "qdrant.html", {"view": view, "hdc_version": APP_VERSION})
+
+
+@app.get("/qdrant/cards/{source_id}", response_class=HTMLResponse)
+async def qdrant_card_view(request: Request, source_id: str) -> HTMLResponse:
+    options = load_options()
+    retrieval_service_url = str(options["retrieval_service_url"]).rstrip("/")
+
+    ok, status_code, elapsed_ms, payload, error = await get_json(
+        f"{retrieval_service_url}/source/cards/{source_id}",
+        timeout=20.0,
+    )
+
+    data = payload if isinstance(payload, dict) else {}
+    source = data.get("source") if isinstance(data.get("source"), dict) else {}
+
+    view = {
+        "nav_items": nav_items("qdrant"),
+        "source_id": source_id,
+        "source": source,
+        "ok": ok and bool(data.get("ok", ok)),
+        "status_code": status_code,
+        "elapsed_ms": elapsed_ms,
+        "error": error or ("" if source else "Карточка не найдена."),
+        "retrieval_service_url": retrieval_service_url,
+        "updated_at": format_time(datetime.now(timezone.utc).isoformat()),
+        "updated_at_full": format_dt(datetime.now(timezone.utc).isoformat()),
+    }
+
+    return templates.TemplateResponse(
+        request,
+        "qdrant_card.html",
+        {"view": view, "hdc_version": APP_VERSION},
+    )
 
 
 @app.get("/regression", response_class=HTMLResponse)
