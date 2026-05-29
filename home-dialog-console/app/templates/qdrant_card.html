@@ -111,7 +111,7 @@
           <p class="muted">{{ view.source_id }} · {{ view.retrieval_service_url }}</p>
         </div>
         <div class="topbar-actions">
-          <a class="refresh" href="../../qdrant">Назад к Qdrant</a>
+          <a class="refresh" href="qdrant">Назад к Qdrant</a>
         </div>
       </header>
 
@@ -183,7 +183,7 @@
           Следующим шагом добавим сохранение в SQLite через retrieval-service.
         </div>
 
-        <form method="post" action="{{ view.source_id }}/save">
+        <form method="post" action="qdrant/cards/{{ view.source_id }}/save">
           <div class="form-grid" style="margin-top: 16px;">
             <div class="form-field">
               <label>source_id</label>
@@ -290,7 +290,7 @@
         </form>
 
         <div class="form-actions">
-          <form method="post" action="{{ view.source_id }}/toggle">
+          <form method="post" action="qdrant/cards/{{ view.source_id }}/toggle">
             <input type="hidden" name="enabled" value="{{ 'true' if view.source.enabled else 'false' }}">
             <button class="refresh" type="submit">{{ 'Отключить карточку' if view.source.enabled else 'Включить карточку' }}</button>
           </form>
@@ -309,5 +309,51 @@
       {% endif %}
     </main>
   </div>
+
+<script>
+(function () {
+  function hdcBasePath() {
+    const path = window.location.pathname || "/";
+    const marker = "/api/hassio_ingress/";
+    const pos = path.indexOf(marker);
+
+    if (pos >= 0) {
+      const after = path.slice(pos + marker.length);
+      const token = after.split("/")[0];
+      if (token) {
+        return path.slice(0, pos + marker.length + token.length + 1);
+      }
+    }
+
+    return "/";
+  }
+
+  function cleanRoute(value) {
+    return String(value || "")
+      .replace(/^https?:\/\//, "http://")
+      .replace(/^(\.\/|\.\.\/)+/, "")
+      .replace(/^\/+/, "");
+  }
+
+  const base = hdcBasePath();
+
+  document.querySelectorAll("a[href]").forEach(function (item) {
+    const raw = item.getAttribute("href") || "";
+    if (!raw || raw.startsWith("#") || raw.startsWith("http://") || raw.startsWith("https://") || raw.startsWith("mailto:")) {
+      return;
+    }
+    item.setAttribute("href", base + cleanRoute(raw));
+  });
+
+  document.querySelectorAll("form[action]").forEach(function (item) {
+    const raw = item.getAttribute("action") || "";
+    if (!raw || raw.startsWith("#") || raw.startsWith("http://") || raw.startsWith("https://")) {
+      return;
+    }
+    item.setAttribute("action", base + cleanRoute(raw));
+  });
+})();
+</script>
+
 </body>
 </html>

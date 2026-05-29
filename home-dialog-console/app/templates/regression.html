@@ -200,5 +200,51 @@
       </details>
     </main>
   </div>
+
+<script>
+(function () {
+  function hdcBasePath() {
+    const path = window.location.pathname || "/";
+    const marker = "/api/hassio_ingress/";
+    const pos = path.indexOf(marker);
+
+    if (pos >= 0) {
+      const after = path.slice(pos + marker.length);
+      const token = after.split("/")[0];
+      if (token) {
+        return path.slice(0, pos + marker.length + token.length + 1);
+      }
+    }
+
+    return "/";
+  }
+
+  function cleanRoute(value) {
+    return String(value || "")
+      .replace(/^https?:\/\//, "http://")
+      .replace(/^(\.\/|\.\.\/)+/, "")
+      .replace(/^\/+/, "");
+  }
+
+  const base = hdcBasePath();
+
+  document.querySelectorAll("a[href]").forEach(function (item) {
+    const raw = item.getAttribute("href") || "";
+    if (!raw || raw.startsWith("#") || raw.startsWith("http://") || raw.startsWith("https://") || raw.startsWith("mailto:")) {
+      return;
+    }
+    item.setAttribute("href", base + cleanRoute(raw));
+  });
+
+  document.querySelectorAll("form[action]").forEach(function (item) {
+    const raw = item.getAttribute("action") || "";
+    if (!raw || raw.startsWith("#") || raw.startsWith("http://") || raw.startsWith("https://")) {
+      return;
+    }
+    item.setAttribute("action", base + cleanRoute(raw));
+  });
+})();
+</script>
+
 </body>
 </html>

@@ -1,5 +1,5 @@
 name: Home Dialog Console
-version: "0.1.32"
+version: "0.1.33"
 slug: home_dialog_console
 description: Diagnostic and control console for a local dialog-service
 url: "https://github.com/alexsudakov/home-dialog-console"
