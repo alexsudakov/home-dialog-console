@@ -234,7 +234,7 @@
 
             <div class="form-field">
               <label>selected_analyzers JSON</label>
-              <textarea name="selected_analyzers_json">{{ view.source.selected_analyzers | tojson(indent=2) }}</textarea>
+              <textarea name="selected_analyzers_json">{{ view.source.selected_analyzers | default([], true) | tojson(indent=2) }}</textarea>
             </div>
           </div>
 
