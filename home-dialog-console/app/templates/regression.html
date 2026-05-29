@@ -117,25 +117,25 @@
 
       <section class="panel">
         <div class="panel-header">
-          <h2>Проверка FastPath / target_resolver_v2</h2>
-          <span class="small-muted">fastparse-v2 + action-executor-prepare</span>
+          <h2>Проверка пользовательского запроса</h2>
+          <span class="small-muted">FastPath + Source Selector</span>
         </div>
-        <p class="muted">Безопасная проверка FastPath: HDC проверяет разбор фразы, найденные сущности и подготовку действия без выполнения service call.</p>
+        <p class="muted">Один безопасный тест для пользовательской фразы. HDC проверяет FastPath / target_resolver_v2 и Source Selector / route-card, но ничего не выполняет в Home Assistant.</p>
 
-        <form method="post" action="regression/fastpath/check">
-          <label for="fastpath-question">Фраза</label>
-          <textarea id="fastpath-question" name="question" rows="3" class="hdc-textarea" placeholder="Например: что с люстрой?">{{ view.fastpath_result.get('question') }}</textarea>
+        <form method="post" action="regression/query/check">
+          <label for="query-question">Фраза</label>
+          <textarea id="query-question" name="question" rows="3" class="hdc-textarea" placeholder="Например: что с люстрой?">{{ view.query_value }}</textarea>
           <div class="form-actions">
-            <button class="refresh" type="submit">Проверить FastPath</button>
+            <button class="refresh" type="submit">Проверить запрос</button>
           </div>
         </form>
 
         <details class="raw-details">
-          <summary>Примеры FastPath-фраз</summary>
+          <summary>Примеры запросов</summary>
           <div class="table-wrap">
             <table>
               <tbody>
-                {% for example in view.fastpath_examples %}
+                {% for example in view.query_check_examples %}
                 <tr><td>{{ example }}</td></tr>
                 {% endfor %}
               </tbody>
@@ -163,7 +163,7 @@
       <section class="dashboard-grid">
         <article class="panel">
           <div class="panel-header">
-            <h2>Fastparse v2</h2>
+            <h2>FastPath / target_resolver_v2</h2>
             <span class="small-muted">/debug/fastparse-v2</span>
           </div>
           <div class="table-wrap">
@@ -248,35 +248,6 @@
         <pre>{{ view.fastpath_result.get('raw') | tojson(indent=2) }}</pre>
       </details>
       {% endif %}
-
-      <section class="panel">
-        <div class="panel-header">
-          <h2>Проверка Source Selector / route-card</h2>
-          <span class="small-muted">route-shortcut + source/select</span>
-        </div>
-        <p class="muted">Безопасная проверка: HDC отправляет фразу только в debug endpoints Source Selector / route-card и ничего не выполняет в Home Assistant. FastPath этим блоком пока не проверяется.</p>
-
-        <form method="post" action="regression/resolver/check">
-          <label for="question">Фраза</label>
-          <textarea id="question" name="question" rows="3" class="hdc-textarea" placeholder="Например: Что с вытяжкой на кухне?">{{ view.resolver_result.get('question') }}</textarea>
-          <div class="form-actions">
-            <button class="refresh" type="submit">Проверить маршрут</button>
-          </div>
-        </form>
-
-        <details class="raw-details">
-          <summary>Примеры фраз</summary>
-          <div class="table-wrap">
-            <table>
-              <tbody>
-                {% for example in view.resolver_examples %}
-                <tr><td>{{ example }}</td></tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        </details>
-      </section>
 
       {% if view.resolver_result.get('route_error') or view.resolver_result.get('source_error') %}
       <section class="panel">

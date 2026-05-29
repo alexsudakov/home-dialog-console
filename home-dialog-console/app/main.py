@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.39"
+APP_VERSION = "0.1.40"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 DEFAULT_RETRIEVAL_SERVICE_URL = "http://192.168.1.138:8085"
@@ -1032,6 +1032,18 @@ FASTPATH_EXAMPLES = [
 ]
 
 
+QUERY_CHECK_EXAMPLES = [
+    "что с люстрой?",
+    "что с вытяжкой на кухне?",
+    "почему вытяжка не включилась?",
+    "Была ли какая-то тревога дома?",
+    "Где сейчас Ира?",
+    "Где была Ира сегодня?",
+    "Когда Ира ушла?",
+    "включи свет в ванной",
+]
+
+
 def first_entity_rows(items: Any, limit: int = 8) -> list[dict[str, Any]]:
     if not isinstance(items, list):
         return []
@@ -1180,6 +1192,12 @@ def build_regression_view(payload: dict[str, Any] | None, cases: dict[str, Any],
         "resolver_examples": RESOLVER_EXAMPLES,
         "resolver_result": resolver_result or resolver_empty_result(),
         "fastpath_examples": FASTPATH_EXAMPLES,
+        "query_check_examples": QUERY_CHECK_EXAMPLES,
+        "query_value": (
+            (fastpath_result or {}).get("question")
+            or (resolver_result or {}).get("question")
+            or ""
+        ),
         "fastpath_result": fastpath_result or fastpath_empty_result(),
     }
 
@@ -1556,6 +1574,29 @@ async def regression(request: Request) -> HTMLResponse:
     dialog_service_url = str(options["dialog_service_url"]).rstrip("/")
     cases = await fetch_regression_cases(dialog_service_url)
     view = build_regression_view(None, cases)
+    return templates.TemplateResponse(request, "regression.html", {"view": view, "options": public_options(options), "hdc_version": APP_VERSION})
+
+
+@app.post("/regression/query/check", response_class=HTMLResponse)
+async def regression_query_check(request: Request) -> HTMLResponse:
+    options = load_options()
+    dialog_service_url = str(options["dialog_service_url"]).rstrip("/")
+    cases = await fetch_regression_cases(dialog_service_url)
+
+    body = await request.body()
+    parsed_form = parse_qs(body.decode("utf-8"), keep_blank_values=True)
+    form = {key: values[-1] if values else "" for key, values in parsed_form.items()}
+    question = str(form.get("question") or "").strip()
+
+    fastpath_result = await run_fastpath_check(dialog_service_url, question)
+    resolver_result = await run_resolver_check(dialog_service_url, question)
+
+    view = build_regression_view(
+        None,
+        cases,
+        fastpath_result=fastpath_result,
+        resolver_result=resolver_result,
+    )
     return templates.TemplateResponse(request, "regression.html", {"view": view, "options": public_options(options), "hdc_version": APP_VERSION})
 
 
