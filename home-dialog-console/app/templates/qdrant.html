@@ -6,6 +6,157 @@
   <title>HDC — Qdrant</title>
   <style>
 {% include "inline.css" %}
+
+    .qdrant-toolbar {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) 180px 180px 160px;
+      gap: 12px;
+      align-items: end;
+      margin-top: 14px;
+    }
+
+    .qdrant-toolbar label {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .qdrant-toolbar input,
+    .qdrant-toolbar select {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+    }
+
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 14px;
+      margin-top: 16px;
+    }
+
+    .source-card {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: var(--panel);
+      padding: 16px;
+    }
+
+    .source-card.hidden {
+      display: none;
+    }
+
+    .source-card-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 10px;
+    }
+
+    .source-card-title {
+      margin: 0;
+      font-size: 17px;
+    }
+
+    .source-card-id {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      color: var(--muted);
+      word-break: break-word;
+      margin-top: 4px;
+    }
+
+    .source-card-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 10px 0;
+    }
+
+    .meta-pill {
+      display: inline-flex;
+      padding: 5px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.03);
+    }
+
+    .source-card-short {
+      color: var(--text);
+      line-height: 1.45;
+      margin: 10px 0;
+    }
+
+    .source-card-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .source-card-actions button[disabled] {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .examples-list {
+      margin: 8px 0 0 0;
+      padding-left: 20px;
+    }
+
+    .examples-list li {
+      margin: 4px 0;
+    }
+
+    .details-block {
+      margin-top: 12px;
+    }
+
+    .details-block summary {
+      cursor: pointer;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .long-text {
+      white-space: pre-wrap;
+      line-height: 1.45;
+      color: var(--text);
+      margin-top: 10px;
+    }
+
+    .storage-note {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .raw-compact pre {
+      max-height: 260px;
+      overflow: auto;
+    }
+
+    @media (max-width: 900px) {
+      .qdrant-toolbar {
+        grid-template-columns: 1fr;
+      }
+
+      .cards-grid {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
@@ -34,7 +185,7 @@
         <div>
           <p class="eyebrow">Home Dialog Console</p>
           <h1>Qdrant</h1>
-          <p class="muted">Карточки Source Selector, состояние индекса и ручная переиндексация Qdrant.</p>
+          <p class="muted">Карточки Source Selector, SQLite-хранилище и ручная переиндексация Qdrant.</p>
         </div>
         <div class="topbar-actions">
           <div class="updated">Обновлено: <strong>{{ view.updated_at }}</strong></div>
@@ -69,10 +220,26 @@
 
       <section class="panel">
         <div class="panel-header">
+          <h2>Хранилище карточек</h2>
+          <span class="small-muted">{{ view.retrieval_service_url }}/source/cards</span>
+        </div>
+        <div class="storage-note">
+          <span class="meta-pill">storage: {{ view.source_cards_status.storage or 'sqlite' }}</span>
+          <span class="meta-pill">cards: {{ view.source_cards_status.sources_count }}</span>
+          <span class="meta-pill">chunks: {{ view.source_cards_status.chunks_count }}</span>
+          <span class="meta-pill">path: {{ view.source_cards_status.cards_path }}</span>
+        </div>
+        {% if view.source_cards_status.error %}
+        <p class="empty">Ошибка чтения карточек: {{ view.source_cards_status.error }}</p>
+        {% endif %}
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
           <h2>Переиндексация</h2>
           <span class="small-muted">{{ view.retrieval_service_url }}/source/index</span>
         </div>
-        <p class="muted">Кнопка пересоздаёт индекс Qdrant из текущего source_cards.yaml. Действия в Home Assistant не выполняются.</p>
+        <p class="muted">Кнопка пересоздаёт индекс Qdrant из текущих карточек Source Selector. Действия в Home Assistant не выполняются.</p>
         <form method="post" action="qdrant/reindex">
           <button type="submit" class="refresh">Переиндексировать Qdrant</button>
         </form>
@@ -120,24 +287,27 @@
           </div>
           {% if card.message %}<p class="muted">{{ card.message }}</p>{% endif %}
           {% if card.details_rows %}
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Поле</th>
-                  <th>Значение</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for row in card.details_rows %}
-                <tr>
-                  <td>{{ row.name }}</td>
-                  <td>{{ row.value }}</td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
+          <details>
+            <summary>Диагностические детали</summary>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Поле</th>
+                    <th>Значение</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in card.details_rows %}
+                  <tr>
+                    <td>{{ row.name }}</td>
+                    <td>{{ row.value }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </details>
           {% else %}
           <p class="empty">Подробностей нет в diagnostics summary.</p>
           {% endif %}
@@ -149,72 +319,139 @@
         <div class="panel-header">
           <h2>Все карточки Source Selector</h2>
           <span class="small-muted">
-            {{ view.source_cards_status.sources_count }} карточек · {{ view.source_cards_status.chunks_count }} chunks · {{ view.source_cards_status.cards_path }}
+            <span id="cardsShownCount">{{ view.source_cards | length }}</span> / {{ view.source_cards | length }} карточек
           </span>
         </div>
 
-        {% if view.source_cards_status.error %}
-        <p class="empty">Ошибка чтения карточек: {{ view.source_cards_status.error }}</p>
-        {% endif %}
+        <div class="qdrant-toolbar">
+          <label>
+            Поиск
+            <input id="cardSearch" type="search" placeholder="source_id, название, текст…" autocomplete="off">
+          </label>
+
+          <label>
+            Group
+            <select id="groupFilter">
+              <option value="">Все группы</option>
+              {% for group in (view.source_cards | map(attribute='group') | unique | list | sort) %}
+              <option value="{{ group }}">{{ group }}</option>
+              {% endfor %}
+            </select>
+          </label>
+
+          <label>
+            Тип
+            <select id="kindFilter">
+              <option value="">Все типы</option>
+              {% for kind in (view.source_cards | map(attribute='card_kind') | unique | list | sort) %}
+              <option value="{{ kind }}">{{ kind }}</option>
+              {% endfor %}
+            </select>
+          </label>
+
+          <label>
+            Enabled
+            <select id="enabledFilter">
+              <option value="">Все</option>
+              <option value="true">enabled=true</option>
+              <option value="false">enabled=false</option>
+            </select>
+          </label>
+        </div>
 
         {% if view.source_cards %}
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>source_id</th>
-                <th>Название</th>
-                <th>Тип</th>
-                <th>Group</th>
-                <th>Enabled</th>
-                <th>Plan</th>
-                <th>Route / Analyzer</th>
-                <th>Sources</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for card in view.source_cards %}
-              <tr>
-                <td>{{ card.source_id }}</td>
-                <td>{{ card.title }}</td>
-                <td>{{ card.card_kind }}</td>
-                <td>{{ card.group }}</td>
-                <td>{{ card.enabled }}</td>
-                <td>{{ card.plan_type }}</td>
-                <td>{{ card.route_id or card.analyzer_id or '—' }}</td>
-                <td>
-                  <div>required: {{ (card.required_sources or []) | join(', ') }}</div>
-                  {% if card.optional_sources %}<div class="small-muted">optional: {{ card.optional_sources | join(', ') }}</div>{% endif %}
-                </td>
-              </tr>
-              <tr>
-                <td colspan="8">
-                  <details>
-                    <summary>Текст карточки и примеры</summary>
-                    <div class="list">
-                      <div class="list-row info-row">
-                        <strong>short</strong>
-                        <span>{{ card.short or '—' }}</span>
-                      </div>
-                      <div class="list-row info-row">
-                        <strong>positive_examples</strong>
-                        <span>{{ (card.positive_examples or []) | join(' · ') }}</span>
-                      </div>
-                      <div class="list-row warning-row">
-                        <strong>negative_examples</strong>
-                        <span>{{ (card.negative_examples or []) | join(' · ') }}</span>
-                      </div>
-                      <div class="list-row info-row">
-                        <strong>output_shape</strong>
-                        <span>{{ (card.output_shape or []) | join(' · ') }}</span>
-                      </div>
-                    </div>
-                  </details>
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+        <div class="cards-grid" id="sourceCardsGrid">
+          {% for card in view.source_cards %}
+          {% set route_or_analyzer = card.route_id or card.analyzer_id or '—' %}
+          <article
+            class="source-card"
+            data-source-id="{{ card.source_id }}"
+            data-title="{{ card.title }}"
+            data-group="{{ card.group }}"
+            data-kind="{{ card.card_kind }}"
+            data-enabled="{{ 'true' if card.enabled else 'false' }}"
+            data-search="{{ card.source_id }} {{ card.title }} {{ card.short }} {{ card.full }} {{ card.card_kind }} {{ card.group }} {{ route_or_analyzer }}"
+          >
+            <div class="source-card-header">
+              <div>
+                <h3 class="source-card-title">{{ card.title }}</h3>
+                <div class="source-card-id">{{ card.source_id }}</div>
+              </div>
+              <span class="table-status {{ 'ok' if card.enabled else 'neutral' }}">{{ 'enabled' if card.enabled else 'disabled' }}</span>
+            </div>
+
+            <div class="source-card-meta">
+              <span class="meta-pill">group: {{ card.group }}</span>
+              <span class="meta-pill">kind: {{ card.card_kind }}</span>
+              <span class="meta-pill">plan: {{ card.plan_type or '—' }}</span>
+              <span class="meta-pill">{{ route_or_analyzer }}</span>
+            </div>
+
+            <p class="source-card-short">{{ card.short or 'Краткое описание не заполнено.' }}</p>
+
+            <div class="source-card-meta">
+              <span class="meta-pill">required: {{ (card.required_sources or []) | join(', ') if card.required_sources else '—' }}</span>
+              {% if card.optional_sources %}
+              <span class="meta-pill">optional: {{ card.optional_sources | join(', ') }}</span>
+              {% endif %}
+            </div>
+
+            <details class="details-block">
+              <summary>Открыть карточку</summary>
+
+              {% if card.full %}
+              <h4>Полное описание</h4>
+              <div class="long-text">{{ card.full }}</div>
+              {% endif %}
+
+              {% if card.positive_examples %}
+              <h4>Положительные примеры</h4>
+              <ul class="examples-list">
+                {% for item in card.positive_examples %}
+                <li>{{ item }}</li>
+                {% endfor %}
+              </ul>
+              {% endif %}
+
+              {% if card.negative_examples %}
+              <h4>Отрицательные примеры</h4>
+              <ul class="examples-list">
+                {% for item in card.negative_examples %}
+                <li>{{ item }}</li>
+                {% endfor %}
+              </ul>
+              {% endif %}
+
+              {% if card.output_shape %}
+              <h4>Ожидаемый выход</h4>
+              <ul class="examples-list">
+                {% for item in card.output_shape %}
+                <li>{{ item }}</li>
+                {% endfor %}
+              </ul>
+              {% endif %}
+
+              <h4>Служебные поля</h4>
+              <div class="table-wrap">
+                <table>
+                  <tbody>
+                    <tr><td>planner_id</td><td>{{ card.planner_id or '—' }}</td></tr>
+                    <tr><td>route_id</td><td>{{ card.route_id or '—' }}</td></tr>
+                    <tr><td>analyzer_id</td><td>{{ card.analyzer_id or '—' }}</td></tr>
+                    <tr><td>created_at</td><td>{{ card.created_at or '—' }}</td></tr>
+                    <tr><td>updated_at</td><td>{{ card.updated_at or '—' }}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </details>
+
+            <div class="source-card-actions">
+              <button type="button" class="refresh" disabled>Редактировать</button>
+              <button type="button" class="refresh" disabled>{{ 'Отключить' if card.enabled else 'Включить' }}</button>
+              <button type="button" class="refresh" disabled>Удалить</button>
+            </div>
+          </article>
+          {% endfor %}
         </div>
         {% else %}
         <p class="empty">Карточки не получены от retrieval-service.</p>
@@ -260,11 +497,61 @@
         </div>
       </section>
 
-      <details class="raw-details">
-        <summary>Raw Qdrant JSON</summary>
-        <pre>{{ view.raw | tojson(indent=2) }}</pre>
+      <details class="raw-details raw-compact">
+        <summary>Raw status JSON без полного списка карточек</summary>
+        <pre>{{ {
+          "collection": view.collection,
+          "model": view.model,
+          "retrieval_service_url": view.retrieval_service_url,
+          "source_cards_status": view.source_cards_status,
+          "probes": view.probes
+        } | tojson(indent=2) }}</pre>
       </details>
     </main>
   </div>
+
+  <script>
+    (function () {
+      const search = document.getElementById('cardSearch');
+      const group = document.getElementById('groupFilter');
+      const kind = document.getElementById('kindFilter');
+      const enabled = document.getElementById('enabledFilter');
+      const cards = Array.from(document.querySelectorAll('.source-card'));
+      const count = document.getElementById('cardsShownCount');
+
+      function norm(value) {
+        return String(value || '').toLowerCase().trim();
+      }
+
+      function applyFilters() {
+        const q = norm(search && search.value);
+        const g = group && group.value;
+        const k = kind && kind.value;
+        const e = enabled && enabled.value;
+        let shown = 0;
+
+        cards.forEach((card) => {
+          const text = norm(card.dataset.search);
+          const okSearch = !q || text.includes(q);
+          const okGroup = !g || card.dataset.group === g;
+          const okKind = !k || card.dataset.kind === k;
+          const okEnabled = !e || card.dataset.enabled === e;
+          const visible = okSearch && okGroup && okKind && okEnabled;
+
+          card.classList.toggle('hidden', !visible);
+          if (visible) shown += 1;
+        });
+
+        if (count) count.textContent = shown;
+      }
+
+      [search, group, kind, enabled].forEach((item) => {
+        if (item) item.addEventListener('input', applyFilters);
+        if (item) item.addEventListener('change', applyFilters);
+      });
+
+      applyFilters();
+    })();
+  </script>
 </body>
 </html>

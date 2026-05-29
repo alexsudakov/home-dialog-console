@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.28"
+APP_VERSION = "0.1.29"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 DEFAULT_RETRIEVAL_SERVICE_URL = "http://192.168.1.138:8085"
@@ -573,7 +573,7 @@ async def build_qdrant_view(reindex_result: dict[str, Any] | None = None) -> dic
             {"label": "Qdrant", "value": qdrant_card["label"], "hint": qdrant_card["status"]},
             {"label": "Source Selector", "value": source_selector_card["label"], "hint": source_selector_card["status"]},
             {"label": "Collection", "value": collection, "hint": "source cards"},
-            {"label": "Cards", "value": str(len(source_cards)), "hint": "source_cards.yaml"},
+            {"label": "Cards", "value": str(len(source_cards)), "hint": "SQLite cards"},
             {"label": "Probes", "value": f"{probe_ok_count}/2", "hint": "route-card"},
         ],
         "cards": [qdrant_card, source_selector_card],
