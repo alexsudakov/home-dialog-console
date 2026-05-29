@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.37"
+APP_VERSION = "0.1.38"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 DEFAULT_RETRIEVAL_SERVICE_URL = "http://192.168.1.138:8085"
@@ -910,6 +910,119 @@ async def build_qdrant_view(reindex_result: dict[str, Any] | None = None) -> dic
     }
 
 
+RESOLVER_EXAMPLES = [
+    "Что с вытяжкой на кухне?",
+    "Была ли какая-то тревога дома?",
+    "Где сейчас Ира?",
+    "Где была Ира сегодня?",
+    "Когда Ира ушла?",
+    "включи свет в ванной",
+    "что со светом в туалете",
+]
+
+
+def compact_source_select_candidates(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    candidates = payload.get("candidates") if isinstance(payload.get("candidates"), list) else []
+    rows: list[dict[str, Any]] = []
+
+    for item in candidates[:10]:
+        if not isinstance(item, dict):
+            continue
+        rows.append({
+            "source_id": item.get("source_id") or "—",
+            "card_kind": item.get("card_kind") or "—",
+            "route_id": item.get("route_id") or "—",
+            "analyzer_id": item.get("analyzer_id") or "—",
+            "plan_type": item.get("plan_type") or "—",
+            "score": item.get("score"),
+            "best_positive_score": item.get("best_positive_score"),
+            "title": item.get("title") or "—",
+        })
+
+    return rows
+
+
+def resolver_empty_result() -> dict[str, Any]:
+    return {
+        "question": "",
+        "has_result": False,
+        "route": {},
+        "source": {},
+        "route_error": "",
+        "source_error": "",
+        "source_candidates": [],
+        "raw": {},
+    }
+
+
+async def run_resolver_check(dialog_service_url: str, question: str) -> dict[str, Any]:
+    question_clean = str(question or "").strip()
+    if not question_clean:
+        result = resolver_empty_result()
+        result["route_error"] = "Введите фразу для проверки."
+        return result
+
+    route_ok, route_status, route_elapsed_ms, route_payload, route_error = await post_json(
+        f"{dialog_service_url}/debug/planner/route-shortcut",
+        {"question": question_clean},
+        timeout=30.0,
+    )
+
+    source_ok, source_status, source_elapsed_ms, source_payload, source_error = await post_json(
+        f"{dialog_service_url}/debug/source/select",
+        {"question": question_clean, "top_k": 5, "debug": True},
+        timeout=30.0,
+    )
+
+    route_data = route_payload if isinstance(route_payload, dict) else {}
+    source_data = source_payload if isinstance(source_payload, dict) else {}
+
+    top1 = {}
+    candidates = source_data.get("candidates") if isinstance(source_data.get("candidates"), list) else []
+    if candidates and isinstance(candidates[0], dict):
+        top1 = candidates[0]
+
+    return {
+        "question": question_clean,
+        "has_result": True,
+        "route": {
+            "transport_ok": route_ok,
+            "status_code": route_status,
+            "elapsed_ms": route_elapsed_ms,
+            "accepted": route_data.get("accepted"),
+            "reject_reason": route_data.get("reject_reason") or "—",
+            "source_id": route_data.get("source_id") or "—",
+            "route_id": route_data.get("route_id") or "—",
+            "analyzer_id": route_data.get("analyzer_id") or "—",
+            "plan_type": route_data.get("plan_type") or "—",
+            "best_positive_score": route_data.get("best_positive_score"),
+            "candidate_score": route_data.get("candidate_score"),
+        },
+        "source": {
+            "transport_ok": source_ok,
+            "status_code": source_status,
+            "elapsed_ms": source_elapsed_ms,
+            "ok": source_data.get("ok"),
+            "top_source_id": top1.get("source_id") or "—",
+            "top_card_kind": top1.get("card_kind") or "—",
+            "top_route_id": top1.get("route_id") or "—",
+            "top_analyzer_id": top1.get("analyzer_id") or "—",
+            "top_plan_type": top1.get("plan_type") or "—",
+            "top_score": top1.get("score"),
+            "top_title": top1.get("title") or "—",
+            "collection": source_data.get("collection") or "—",
+            "model": source_data.get("model") or "—",
+        },
+        "route_error": route_error,
+        "source_error": source_error,
+        "source_candidates": compact_source_select_candidates(source_data),
+        "raw": {
+            "route_shortcut": route_data,
+            "source_select": source_data,
+        },
+    }
+
+
 def regression_result_view(row: dict[str, Any]) -> dict[str, Any]:
     excerpt = row.get("response_excerpt") if isinstance(row.get("response_excerpt"), dict) else {}
     validated_plan = excerpt.get("validated_plan") if isinstance(excerpt.get("validated_plan"), dict) else {}
@@ -938,7 +1051,7 @@ def regression_result_view(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_regression_view(payload: dict[str, Any] | None, cases: dict[str, Any], group: str | None = None, error: str = "") -> dict[str, Any]:
+def build_regression_view(payload: dict[str, Any] | None, cases: dict[str, Any], group: str | None = None, error: str = "", resolver_result: dict[str, Any] | None = None) -> dict[str, Any]:
     summary = (payload or {}).get("summary") or {}
     results = [regression_result_view(item) for item in ((payload or {}).get("results") or [])]
     return {
@@ -952,6 +1065,8 @@ def build_regression_view(payload: dict[str, Any] | None, cases: dict[str, Any],
         "updated_at": format_time(datetime.now(timezone.utc).isoformat()),
         "safe_note": "Эти тесты безопасны: они не вызывают /admin/actions/execute и не выполняют действия в Home Assistant.",
         "planner_note": "Planner regression включает быстрые route-card проверки и обычно выполняется 1–2 минуты.",
+        "resolver_examples": RESOLVER_EXAMPLES,
+        "resolver_result": resolver_result or resolver_empty_result(),
     }
 
 
@@ -1327,6 +1442,22 @@ async def regression(request: Request) -> HTMLResponse:
     dialog_service_url = str(options["dialog_service_url"]).rstrip("/")
     cases = await fetch_regression_cases(dialog_service_url)
     view = build_regression_view(None, cases)
+    return templates.TemplateResponse(request, "regression.html", {"view": view, "options": public_options(options), "hdc_version": APP_VERSION})
+
+
+@app.post("/regression/resolver/check", response_class=HTMLResponse)
+async def regression_resolver_check(request: Request) -> HTMLResponse:
+    options = load_options()
+    dialog_service_url = str(options["dialog_service_url"]).rstrip("/")
+    cases = await fetch_regression_cases(dialog_service_url)
+
+    body = await request.body()
+    parsed_form = parse_qs(body.decode("utf-8"), keep_blank_values=True)
+    form = {key: values[-1] if values else "" for key, values in parsed_form.items()}
+    question = str(form.get("question") or "").strip()
+
+    resolver_result = await run_resolver_check(dialog_service_url, question)
+    view = build_regression_view(None, cases, resolver_result=resolver_result)
     return templates.TemplateResponse(request, "regression.html", {"view": view, "options": public_options(options), "hdc_version": APP_VERSION})
 
 

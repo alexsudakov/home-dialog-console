@@ -96,6 +96,139 @@
         </script>
       </section>
 
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Проверка маршрута фразы</h2>
+          <span class="small-muted">route-shortcut + source/select</span>
+        </div>
+        <p class="muted">Безопасная проверка: HDC отправляет фразу только в debug endpoints dialog-service и ничего не выполняет в Home Assistant.</p>
+
+        <form method="post" action="regression/resolver/check">
+          <label for="question">Фраза</label>
+          <textarea id="question" name="question" rows="3" placeholder="Например: Что с вытяжкой на кухне?">{{ view.resolver_result.get('question') }}</textarea>
+          <div class="form-actions">
+            <button class="refresh" type="submit">Проверить маршрут</button>
+          </div>
+        </form>
+
+        <details class="raw-details">
+          <summary>Примеры фраз</summary>
+          <div class="table-wrap">
+            <table>
+              <tbody>
+                {% for example in view.resolver_examples %}
+                <tr><td>{{ example }}</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </section>
+
+      {% if view.resolver_result.get('route_error') or view.resolver_result.get('source_error') %}
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Ошибки проверки маршрута</h2>
+          <span class="small-muted">transport</span>
+        </div>
+        {% if view.resolver_result.get('route_error') %}
+        <p class="empty">route-shortcut: {{ view.resolver_result.get('route_error') }}</p>
+        {% endif %}
+        {% if view.resolver_result.get('source_error') %}
+        <p class="empty">source/select: {{ view.resolver_result.get('source_error') }}</p>
+        {% endif %}
+      </section>
+      {% endif %}
+
+      {% if view.resolver_result.get('has_result') %}
+      <section class="dashboard-grid">
+        <article class="panel">
+          <div class="panel-header">
+            <h2>Route shortcut</h2>
+            <span class="small-muted">/debug/planner/route-shortcut</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <tbody>
+                <tr><td>accepted</td><td>{{ view.resolver_result.get('route').get('accepted') }}</td></tr>
+                <tr><td>reject_reason</td><td>{{ view.resolver_result.get('route').get('reject_reason') }}</td></tr>
+                <tr><td>source_id</td><td>{{ view.resolver_result.get('route').get('source_id') }}</td></tr>
+                <tr><td>route_id</td><td>{{ view.resolver_result.get('route').get('route_id') }}</td></tr>
+                <tr><td>analyzer_id</td><td>{{ view.resolver_result.get('route').get('analyzer_id') }}</td></tr>
+                <tr><td>plan_type</td><td>{{ view.resolver_result.get('route').get('plan_type') }}</td></tr>
+                <tr><td>best_positive_score</td><td>{{ view.resolver_result.get('route').get('best_positive_score') }}</td></tr>
+                <tr><td>candidate_score</td><td>{{ view.resolver_result.get('route').get('candidate_score') }}</td></tr>
+                <tr><td>HTTP</td><td>{{ view.resolver_result.get('route').get('status_code') }} · {{ view.resolver_result.get('route').get('elapsed_ms') }} мс</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <h2>Source select</h2>
+            <span class="small-muted">/debug/source/select</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <tbody>
+                <tr><td>top source_id</td><td>{{ view.resolver_result.get('source').get('top_source_id') }}</td></tr>
+                <tr><td>top card_kind</td><td>{{ view.resolver_result.get('source').get('top_card_kind') }}</td></tr>
+                <tr><td>top route_id</td><td>{{ view.resolver_result.get('source').get('top_route_id') }}</td></tr>
+                <tr><td>top analyzer_id</td><td>{{ view.resolver_result.get('source').get('top_analyzer_id') }}</td></tr>
+                <tr><td>top plan_type</td><td>{{ view.resolver_result.get('source').get('top_plan_type') }}</td></tr>
+                <tr><td>top score</td><td>{{ view.resolver_result.get('source').get('top_score') }}</td></tr>
+                <tr><td>top title</td><td>{{ view.resolver_result.get('source').get('top_title') }}</td></tr>
+                <tr><td>collection</td><td>{{ view.resolver_result.get('source').get('collection') }}</td></tr>
+                <tr><td>model</td><td>{{ view.resolver_result.get('source').get('model') }}</td></tr>
+                <tr><td>HTTP</td><td>{{ view.resolver_result.get('source').get('status_code') }} · {{ view.resolver_result.get('source').get('elapsed_ms') }} мс</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Кандидаты Source Selector</h2>
+          <span class="small-muted">top 5</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>source_id</th>
+                <th>kind</th>
+                <th>route</th>
+                <th>analyzer</th>
+                <th>plan</th>
+                <th>score</th>
+                <th>title</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in view.resolver_result.get('source_candidates') %}
+              <tr>
+                <td>{{ item.source_id }}</td>
+                <td>{{ item.card_kind }}</td>
+                <td>{{ item.route_id }}</td>
+                <td>{{ item.analyzer_id }}</td>
+                <td>{{ item.plan_type }}</td>
+                <td>{{ item.score }}</td>
+                <td>{{ item.title }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <details class="raw-details">
+        <summary>Raw resolver JSON</summary>
+        <pre>{{ view.resolver_result.get('raw') | tojson(indent=2) }}</pre>
+      </details>
+      {% endif %}
+
       <section class="dashboard-grid">
         <article class="panel summary-panel">
           <div class="panel-header">
