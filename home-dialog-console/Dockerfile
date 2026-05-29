@@ -5,7 +5,7 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1
 ENV PIP_NO_CACHE_DIR=1
 
-RUN pip install --no-cache-dir fastapi uvicorn[standard] httpx jinja2 pydantic
+RUN pip install --no-cache-dir fastapi uvicorn[standard] httpx jinja2 pydantic python-multipart
 
 COPY app /app
 COPY run.sh /run.sh
