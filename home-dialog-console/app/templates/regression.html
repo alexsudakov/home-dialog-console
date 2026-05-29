@@ -6,6 +6,25 @@
   <title>HDC — Тесты</title>
   <style>
 {% include "inline.css" %}
+  
+    .hdc-textarea {
+      width: 100%;
+      min-height: 92px;
+      box-sizing: border-box;
+      border: 1px solid #d7deea;
+      border-radius: 14px;
+      padding: 12px 14px;
+      font: inherit;
+      resize: vertical;
+      background: #fff;
+      color: #111827;
+      outline: none;
+    }
+
+    .hdc-textarea:focus {
+      border-color: #7c9cff;
+      box-shadow: 0 0 0 3px rgba(124, 156, 255, 0.18);
+    }
   </style>
 </head>
 <body>
@@ -98,14 +117,14 @@
 
       <section class="panel">
         <div class="panel-header">
-          <h2>Проверка маршрута фразы</h2>
+          <h2>Проверка Source Selector / route-card</h2>
           <span class="small-muted">route-shortcut + source/select</span>
         </div>
-        <p class="muted">Безопасная проверка: HDC отправляет фразу только в debug endpoints dialog-service и ничего не выполняет в Home Assistant.</p>
+        <p class="muted">Безопасная проверка: HDC отправляет фразу только в debug endpoints Source Selector / route-card и ничего не выполняет в Home Assistant. FastPath этим блоком пока не проверяется.</p>
 
         <form method="post" action="regression/resolver/check">
           <label for="question">Фраза</label>
-          <textarea id="question" name="question" rows="3" placeholder="Например: Что с вытяжкой на кухне?">{{ view.resolver_result.get('question') }}</textarea>
+          <textarea id="question" name="question" rows="3" class="hdc-textarea" placeholder="Например: Что с вытяжкой на кухне?">{{ view.resolver_result.get('question') }}</textarea>
           <div class="form-actions">
             <button class="refresh" type="submit">Проверить маршрут</button>
           </div>
