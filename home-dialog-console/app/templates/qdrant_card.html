@@ -115,6 +115,17 @@
         </div>
       </header>
 
+      {% if view.save_result %}
+      <section class="status-hero {{ 'ok' if view.save_result.ok else 'bad' }}">
+        <div>
+          <div class="status-kicker">Save result</div>
+          <h2>{{ 'Изменение сохранено' if view.save_result.ok else 'Ошибка сохранения' }}</h2>
+          <p>HTTP {{ view.save_result.status_code or '—' }} · {{ view.save_result.elapsed_ms }} мс{% if view.save_result.error %} · {{ view.save_result.error }}{% endif %}</p>
+        </div>
+        <div class="status-pill">{{ 'ok' if view.save_result.ok else 'error' }}</div>
+      </section>
+      {% endif %}
+
       {% if view.error %}
       <section class="status-hero bad">
         <div>
@@ -138,7 +149,7 @@
           Следующим шагом добавим сохранение в SQLite через retrieval-service.
         </div>
 
-        <form method="post" action="#">
+        <form method="post" action="{{ view.source_id }}/save">
           <div class="form-grid" style="margin-top: 16px;">
             <div class="form-field">
               <label>source_id</label>
@@ -239,7 +250,7 @@
           </div>
 
           <div class="form-actions">
-            <button class="refresh" type="button" disabled>Сохранить</button>
+            <button class="refresh" type="submit" name="action" value="save">Сохранить</button>
             <button class="refresh" type="button" disabled>Сохранить и переиндексировать</button>
             <button class="refresh" type="button" disabled>{{ 'Отключить карточку' if view.source.enabled else 'Включить карточку' }}</button>
           </div>

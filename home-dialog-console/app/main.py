@@ -127,6 +127,22 @@ async def post_json(url: str, payload: dict[str, Any] | None = None, timeout: fl
         return False, None, elapsed_ms, None, f"{type(exc).__name__}: {exc or 'no details'}"
 
 
+async def put_json(url: str, payload: dict[str, Any] | None = None, timeout: float = 90.0) -> tuple[bool, int | None, int, Any, str]:
+    started = time.perf_counter()
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.put(url, json=payload or {})
+        elapsed_ms = round((time.perf_counter() - started) * 1000)
+        try:
+            data: Any = response.json()
+        except Exception:
+            data = response.text[:2000]
+        return 200 <= response.status_code < 300, response.status_code, elapsed_ms, data, ""
+    except Exception as exc:
+        elapsed_ms = round((time.perf_counter() - started) * 1000)
+        return False, None, elapsed_ms, None, f"{type(exc).__name__}: {exc or 'no details'}"
+
+
 def fallback_summary(options: dict[str, Any], url: str, status_code: int | None, elapsed_ms: int, error: str) -> dict[str, Any]:
     return {
         "ok": False,
@@ -390,6 +406,46 @@ def build_environment_view() -> dict[str, Any]:
             "utc_now": now_utc.isoformat(),
             "local_now": local_now.isoformat(),
         },
+    }
+
+
+def lines_to_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    return [line.strip() for line in str(value).splitlines() if line.strip()]
+
+
+def parse_json_list(value: Any) -> list[Any]:
+    text = str(value or "").strip()
+    if not text:
+        return []
+    try:
+        parsed = json.loads(text)
+        return parsed if isinstance(parsed, list) else []
+    except Exception:
+        return lines_to_list(text)
+
+
+def source_card_form_payload(form: Any, source_id: str) -> dict[str, Any]:
+    enabled_text = str(form.get("enabled") or "true").lower()
+    return {
+        "source_id": source_id,
+        "planner_id": str(form.get("planner_id") or source_id).strip(),
+        "group": str(form.get("group") or "default").strip(),
+        "enabled": enabled_text in ["1", "true", "yes", "on"],
+        "title": str(form.get("title") or source_id).strip(),
+        "short": str(form.get("short") or "").strip(),
+        "full": str(form.get("full") or "").strip(),
+        "card_kind": str(form.get("card_kind") or "source").strip(),
+        "route_id": str(form.get("route_id") or "").strip() or None,
+        "analyzer_id": str(form.get("analyzer_id") or "").strip() or None,
+        "plan_type": str(form.get("plan_type") or "").strip() or None,
+        "positive_examples": lines_to_list(form.get("positive_examples")),
+        "negative_examples": lines_to_list(form.get("negative_examples")),
+        "required_sources": lines_to_list(form.get("required_sources")),
+        "optional_sources": lines_to_list(form.get("optional_sources")),
+        "output_shape": lines_to_list(form.get("output_shape")),
+        "selected_analyzers": parse_json_list(form.get("selected_analyzers_json")),
     }
 
 
@@ -814,6 +870,49 @@ async def qdrant_card_view(request: Request, source_id: str) -> HTMLResponse:
         "status_code": status_code,
         "elapsed_ms": elapsed_ms,
         "error": error or ("" if source else "Карточка не найдена."),
+        "save_result": None,
+        "retrieval_service_url": retrieval_service_url,
+        "updated_at": format_time(datetime.now(timezone.utc).isoformat()),
+        "updated_at_full": format_dt(datetime.now(timezone.utc).isoformat()),
+    }
+
+    return templates.TemplateResponse(
+        request,
+        "qdrant_card.html",
+        {"view": view, "hdc_version": APP_VERSION},
+    )
+
+
+@app.post("/qdrant/cards/{source_id}/save", response_class=HTMLResponse)
+async def qdrant_card_save(request: Request, source_id: str) -> HTMLResponse:
+    options = load_options()
+    retrieval_service_url = str(options["retrieval_service_url"]).rstrip("/")
+    form = await request.form()
+    card_payload = source_card_form_payload(form, source_id)
+
+    ok, status_code, elapsed_ms, payload, error = await put_json(
+        f"{retrieval_service_url}/source/cards/{source_id}",
+        card_payload,
+        timeout=30.0,
+    )
+
+    data = payload if isinstance(payload, dict) else {}
+    source = data.get("source") if isinstance(data.get("source"), dict) else card_payload
+
+    view = {
+        "nav_items": nav_items("qdrant"),
+        "source_id": source_id,
+        "source": source,
+        "ok": ok and bool(data.get("ok", ok)),
+        "status_code": status_code,
+        "elapsed_ms": elapsed_ms,
+        "error": error or (data.get("detail") if isinstance(data, dict) else "") or "",
+        "save_result": {
+            "ok": ok,
+            "status_code": status_code,
+            "elapsed_ms": elapsed_ms,
+            "error": error or "",
+        },
         "retrieval_service_url": retrieval_service_url,
         "updated_at": format_time(datetime.now(timezone.utc).isoformat()),
         "updated_at_full": format_dt(datetime.now(timezone.utc).isoformat()),
