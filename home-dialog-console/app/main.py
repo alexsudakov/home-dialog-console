@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.31"
+APP_VERSION = "0.1.32"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 DEFAULT_RETRIEVAL_SERVICE_URL = "http://192.168.1.138:8085"
@@ -873,6 +873,7 @@ async def qdrant_card_view(request: Request, source_id: str) -> HTMLResponse:
         "error": error or ("" if source else "Карточка не найдена."),
         "save_result": None,
         "reindex_result": None,
+        "toggle_result": None,
         "retrieval_service_url": retrieval_service_url,
         "updated_at": format_time(datetime.now(timezone.utc).isoformat()),
         "updated_at_full": format_dt(datetime.now(timezone.utc).isoformat()),
@@ -935,6 +936,57 @@ async def qdrant_card_save(request: Request, source_id: str) -> HTMLResponse:
             "error": error or "",
         },
         "reindex_result": reindex_result,
+        "toggle_result": None,
+        "retrieval_service_url": retrieval_service_url,
+        "updated_at": format_time(datetime.now(timezone.utc).isoformat()),
+        "updated_at_full": format_dt(datetime.now(timezone.utc).isoformat()),
+    }
+
+    return templates.TemplateResponse(
+        request,
+        "qdrant_card.html",
+        {"view": view, "hdc_version": APP_VERSION},
+    )
+
+
+@app.post("/qdrant/cards/{source_id}/toggle", response_class=HTMLResponse)
+async def qdrant_card_toggle(request: Request, source_id: str) -> HTMLResponse:
+    options = load_options()
+    retrieval_service_url = str(options["retrieval_service_url"]).rstrip("/")
+
+    body = await request.body()
+    parsed_form = parse_qs(body.decode("utf-8"), keep_blank_values=True)
+    form = {key: values[-1] if values else "" for key, values in parsed_form.items()}
+
+    enabled_now = str(form.get("enabled") or "true").lower() in ["1", "true", "yes", "on"]
+    endpoint = "disable" if enabled_now else "enable"
+
+    ok, status_code, elapsed_ms, payload, error = await post_json(
+        f"{retrieval_service_url}/source/cards/{source_id}/{endpoint}",
+        {},
+        timeout=30.0,
+    )
+
+    data = payload if isinstance(payload, dict) else {}
+    source = data.get("source") if isinstance(data.get("source"), dict) else {}
+
+    view = {
+        "nav_items": nav_items("qdrant"),
+        "source_id": source_id,
+        "source": source,
+        "ok": ok and bool(data.get("ok", ok)),
+        "status_code": status_code,
+        "elapsed_ms": elapsed_ms,
+        "error": error or (data.get("detail") if isinstance(data, dict) else "") or "",
+        "save_result": None,
+        "reindex_result": None,
+        "toggle_result": {
+            "ok": ok and bool(data.get("ok", ok)),
+            "status_code": status_code,
+            "elapsed_ms": elapsed_ms,
+            "action": endpoint,
+            "error": error or "",
+        },
         "retrieval_service_url": retrieval_service_url,
         "updated_at": format_time(datetime.now(timezone.utc).isoformat()),
         "updated_at_full": format_dt(datetime.now(timezone.utc).isoformat()),

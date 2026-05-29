@@ -143,6 +143,23 @@
       </section>
       {% endif %}
 
+      {% if view.toggle_result %}
+      <section class="status-hero {{ 'ok' if view.toggle_result.ok else 'bad' }}">
+        <div>
+          <div class="status-kicker">Toggle result</div>
+          <h2>
+            {% if view.toggle_result.ok %}
+              {{ 'Карточка отключена' if view.toggle_result.action == 'disable' else 'Карточка включена' }}
+            {% else %}
+              Ошибка переключения карточки
+            {% endif %}
+          </h2>
+          <p>HTTP {{ view.toggle_result.status_code or '—' }} · {{ view.toggle_result.elapsed_ms }} мс{% if view.toggle_result.error %} · {{ view.toggle_result.error }}{% endif %}</p>
+        </div>
+        <div class="status-pill">{{ 'ok' if view.toggle_result.ok else 'error' }}</div>
+      </section>
+      {% endif %}
+
       {% if view.error %}
       <section class="status-hero bad">
         <div>
@@ -269,7 +286,14 @@
           <div class="form-actions">
             <button class="refresh" type="submit" name="action" value="save">Сохранить</button>
             <button class="refresh" type="submit" name="action" value="save_reindex">Сохранить и переиндексировать</button>
-            <button class="refresh" type="button" disabled>{{ 'Отключить карточку' if view.source.enabled else 'Включить карточку' }}</button>
+          </div>
+        </form>
+
+        <div class="form-actions">
+          <form method="post" action="{{ view.source_id }}/toggle">
+            <input type="hidden" name="enabled" value="{{ 'true' if view.source.enabled else 'false' }}">
+            <button class="refresh" type="submit">{{ 'Отключить карточку' if view.source.enabled else 'Включить карточку' }}</button>
+          </form>
           </div>
         </form>
       </section>
