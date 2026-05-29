@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.38"
+APP_VERSION = "0.1.39"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 DEFAULT_RETRIEVAL_SERVICE_URL = "http://192.168.1.138:8085"
@@ -1023,6 +1023,118 @@ async def run_resolver_check(dialog_service_url: str, question: str) -> dict[str
     }
 
 
+FASTPATH_EXAMPLES = [
+    "что с люстрой?",
+    "что со светом в туалете?",
+    "включи свет в ванной",
+    "открой шторы в спальне",
+    "что с вытяжкой на кухне?",
+]
+
+
+def first_entity_rows(items: Any, limit: int = 8) -> list[dict[str, Any]]:
+    if not isinstance(items, list):
+        return []
+    rows: list[dict[str, Any]] = []
+    for item in items[:limit]:
+        if not isinstance(item, dict):
+            continue
+        rows.append({
+            "entity_id": item.get("entity_id") or "—",
+            "friendly_name": item.get("friendly_name") or "—",
+            "area_name": item.get("area_name") or "—",
+            "state": item.get("state") or "—",
+            "label": item.get("label") or "—",
+        })
+    return rows
+
+
+def fastpath_empty_result() -> dict[str, Any]:
+    return {
+        "question": "",
+        "has_result": False,
+        "fastparse": {},
+        "prepare": {},
+        "fastparse_error": "",
+        "prepare_error": "",
+        "entities": [],
+        "raw": {},
+    }
+
+
+async def run_fastpath_check(dialog_service_url: str, question: str) -> dict[str, Any]:
+    question_clean = str(question or "").strip()
+    if not question_clean:
+        result = fastpath_empty_result()
+        result["fastparse_error"] = "Введите фразу для проверки."
+        return result
+
+    fp_ok, fp_status, fp_elapsed_ms, fp_payload, fp_error = await post_json(
+        f"{dialog_service_url}/debug/fastparse-v2",
+        {"text": question_clean},
+        timeout=30.0,
+    )
+
+    prep_ok, prep_status, prep_elapsed_ms, prep_payload, prep_error = await post_json(
+        f"{dialog_service_url}/debug/fastpath/action-executor-prepare",
+        {"text": question_clean},
+        timeout=30.0,
+    )
+
+    fp_data = fp_payload if isinstance(fp_payload, dict) else {}
+    prep_data = prep_payload if isinstance(prep_payload, dict) else {}
+
+    semantic = fp_data.get("semantic") if isinstance(fp_data.get("semantic"), dict) else {}
+    parsed = semantic.get("parsed") if isinstance(semantic.get("parsed"), dict) else {}
+
+    results = semantic.get("results") if isinstance(semantic.get("results"), list) else []
+    entity_ids = semantic.get("entity_ids") if isinstance(semantic.get("entity_ids"), list) else prep_data.get("entity_ids")
+
+    prepare_results = prep_data.get("results") if isinstance(prep_data.get("results"), list) else []
+    first_prepare = prepare_results[0] if prepare_results and isinstance(prepare_results[0], dict) else {}
+
+    return {
+        "question": question_clean,
+        "has_result": True,
+        "fastparse": {
+            "transport_ok": fp_ok,
+            "status_code": fp_status,
+            "elapsed_ms": fp_elapsed_ms,
+            "ok": fp_data.get("ok"),
+            "stage": fp_data.get("stage") or "—",
+            "mode": semantic.get("mode") or "—",
+            "intent": semantic.get("intent") or fp_data.get("intent") or "—",
+            "matched": semantic.get("matched"),
+            "metric": parsed.get("metric") or "—",
+            "scope": parsed.get("scope") or "—",
+            "object_text": parsed.get("object_text") or "—",
+            "room": parsed.get("room") or "—",
+            "match_reasons": ", ".join(str(x) for x in (semantic.get("match_reasons") or [])) or "—",
+            "entity_ids": ", ".join(str(x) for x in (entity_ids or [])) or "—",
+            "object_candidate_count": semantic.get("object_candidate_count"),
+        },
+        "prepare": {
+            "transport_ok": prep_ok,
+            "status_code": prep_status,
+            "elapsed_ms": prep_elapsed_ms,
+            "ok": prep_data.get("ok"),
+            "stage": prep_data.get("stage") or "—",
+            "intent": prep_data.get("intent") or "—",
+            "target": prep_data.get("target") or "—",
+            "prepared": first_prepare.get("prepared"),
+            "state_only": first_prepare.get("state_only"),
+            "note": first_prepare.get("note") or "—",
+        },
+        "fastparse_error": fp_error,
+        "prepare_error": prep_error,
+        "entities": first_entity_rows(results),
+        "raw": {
+            "fastparse_v2": fp_data,
+            "action_executor_prepare": prep_data,
+        },
+    }
+
+
 def regression_result_view(row: dict[str, Any]) -> dict[str, Any]:
     excerpt = row.get("response_excerpt") if isinstance(row.get("response_excerpt"), dict) else {}
     validated_plan = excerpt.get("validated_plan") if isinstance(excerpt.get("validated_plan"), dict) else {}
@@ -1051,7 +1163,7 @@ def regression_result_view(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_regression_view(payload: dict[str, Any] | None, cases: dict[str, Any], group: str | None = None, error: str = "", resolver_result: dict[str, Any] | None = None) -> dict[str, Any]:
+def build_regression_view(payload: dict[str, Any] | None, cases: dict[str, Any], group: str | None = None, error: str = "", resolver_result: dict[str, Any] | None = None, fastpath_result: dict[str, Any] | None = None) -> dict[str, Any]:
     summary = (payload or {}).get("summary") or {}
     results = [regression_result_view(item) for item in ((payload or {}).get("results") or [])]
     return {
@@ -1067,6 +1179,8 @@ def build_regression_view(payload: dict[str, Any] | None, cases: dict[str, Any],
         "planner_note": "Planner regression включает быстрые route-card проверки и обычно выполняется 1–2 минуты.",
         "resolver_examples": RESOLVER_EXAMPLES,
         "resolver_result": resolver_result or resolver_empty_result(),
+        "fastpath_examples": FASTPATH_EXAMPLES,
+        "fastpath_result": fastpath_result or fastpath_empty_result(),
     }
 
 
@@ -1442,6 +1556,22 @@ async def regression(request: Request) -> HTMLResponse:
     dialog_service_url = str(options["dialog_service_url"]).rstrip("/")
     cases = await fetch_regression_cases(dialog_service_url)
     view = build_regression_view(None, cases)
+    return templates.TemplateResponse(request, "regression.html", {"view": view, "options": public_options(options), "hdc_version": APP_VERSION})
+
+
+@app.post("/regression/fastpath/check", response_class=HTMLResponse)
+async def regression_fastpath_check(request: Request) -> HTMLResponse:
+    options = load_options()
+    dialog_service_url = str(options["dialog_service_url"]).rstrip("/")
+    cases = await fetch_regression_cases(dialog_service_url)
+
+    body = await request.body()
+    parsed_form = parse_qs(body.decode("utf-8"), keep_blank_values=True)
+    form = {key: values[-1] if values else "" for key, values in parsed_form.items()}
+    question = str(form.get("question") or "").strip()
+
+    fastpath_result = await run_fastpath_check(dialog_service_url, question)
+    view = build_regression_view(None, cases, fastpath_result=fastpath_result)
     return templates.TemplateResponse(request, "regression.html", {"view": view, "options": public_options(options), "hdc_version": APP_VERSION})
 
 

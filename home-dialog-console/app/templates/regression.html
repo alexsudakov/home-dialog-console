@@ -117,6 +117,140 @@
 
       <section class="panel">
         <div class="panel-header">
+          <h2>Проверка FastPath / target_resolver_v2</h2>
+          <span class="small-muted">fastparse-v2 + action-executor-prepare</span>
+        </div>
+        <p class="muted">Безопасная проверка FastPath: HDC проверяет разбор фразы, найденные сущности и подготовку действия без выполнения service call.</p>
+
+        <form method="post" action="regression/fastpath/check">
+          <label for="fastpath-question">Фраза</label>
+          <textarea id="fastpath-question" name="question" rows="3" class="hdc-textarea" placeholder="Например: что с люстрой?">{{ view.fastpath_result.get('question') }}</textarea>
+          <div class="form-actions">
+            <button class="refresh" type="submit">Проверить FastPath</button>
+          </div>
+        </form>
+
+        <details class="raw-details">
+          <summary>Примеры FastPath-фраз</summary>
+          <div class="table-wrap">
+            <table>
+              <tbody>
+                {% for example in view.fastpath_examples %}
+                <tr><td>{{ example }}</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </section>
+
+      {% if view.fastpath_result.get('fastparse_error') or view.fastpath_result.get('prepare_error') %}
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Ошибки FastPath-проверки</h2>
+          <span class="small-muted">transport</span>
+        </div>
+        {% if view.fastpath_result.get('fastparse_error') %}
+        <p class="empty">fastparse-v2: {{ view.fastpath_result.get('fastparse_error') }}</p>
+        {% endif %}
+        {% if view.fastpath_result.get('prepare_error') %}
+        <p class="empty">action-executor-prepare: {{ view.fastpath_result.get('prepare_error') }}</p>
+        {% endif %}
+      </section>
+      {% endif %}
+
+      {% if view.fastpath_result.get('has_result') %}
+      <section class="dashboard-grid">
+        <article class="panel">
+          <div class="panel-header">
+            <h2>Fastparse v2</h2>
+            <span class="small-muted">/debug/fastparse-v2</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <tbody>
+                <tr><td>ok</td><td>{{ view.fastpath_result.get('fastparse').get('ok') }}</td></tr>
+                <tr><td>stage</td><td>{{ view.fastpath_result.get('fastparse').get('stage') }}</td></tr>
+                <tr><td>mode</td><td>{{ view.fastpath_result.get('fastparse').get('mode') }}</td></tr>
+                <tr><td>intent</td><td>{{ view.fastpath_result.get('fastparse').get('intent') }}</td></tr>
+                <tr><td>matched</td><td>{{ view.fastpath_result.get('fastparse').get('matched') }}</td></tr>
+                <tr><td>metric</td><td>{{ view.fastpath_result.get('fastparse').get('metric') }}</td></tr>
+                <tr><td>scope</td><td>{{ view.fastpath_result.get('fastparse').get('scope') }}</td></tr>
+                <tr><td>object_text</td><td>{{ view.fastpath_result.get('fastparse').get('object_text') }}</td></tr>
+                <tr><td>room</td><td>{{ view.fastpath_result.get('fastparse').get('room') }}</td></tr>
+                <tr><td>match_reasons</td><td>{{ view.fastpath_result.get('fastparse').get('match_reasons') }}</td></tr>
+                <tr><td>entity_ids</td><td>{{ view.fastpath_result.get('fastparse').get('entity_ids') }}</td></tr>
+                <tr><td>HTTP</td><td>{{ view.fastpath_result.get('fastparse').get('status_code') }} · {{ view.fastpath_result.get('fastparse').get('elapsed_ms') }} мс</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <h2>Action Executor prepare</h2>
+            <span class="small-muted">/debug/fastpath/action-executor-prepare</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <tbody>
+                <tr><td>ok</td><td>{{ view.fastpath_result.get('prepare').get('ok') }}</td></tr>
+                <tr><td>stage</td><td>{{ view.fastpath_result.get('prepare').get('stage') }}</td></tr>
+                <tr><td>intent</td><td>{{ view.fastpath_result.get('prepare').get('intent') }}</td></tr>
+                <tr><td>target</td><td>{{ view.fastpath_result.get('prepare').get('target') }}</td></tr>
+                <tr><td>prepared</td><td>{{ view.fastpath_result.get('prepare').get('prepared') }}</td></tr>
+                <tr><td>state_only</td><td>{{ view.fastpath_result.get('prepare').get('state_only') }}</td></tr>
+                <tr><td>note</td><td>{{ view.fastpath_result.get('prepare').get('note') }}</td></tr>
+                <tr><td>HTTP</td><td>{{ view.fastpath_result.get('prepare').get('status_code') }} · {{ view.fastpath_result.get('prepare').get('elapsed_ms') }} мс</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Найденные сущности FastPath</h2>
+          <span class="small-muted">semantic results</span>
+        </div>
+        {% if view.fastpath_result.get('entities') %}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>entity_id</th>
+                <th>friendly_name</th>
+                <th>area</th>
+                <th>state</th>
+                <th>label</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in view.fastpath_result.get('entities') %}
+              <tr>
+                <td>{{ item.entity_id }}</td>
+                <td>{{ item.friendly_name }}</td>
+                <td>{{ item.area_name }}</td>
+                <td>{{ item.state }}</td>
+                <td>{{ item.label }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <p class="empty">Сущности не найдены.</p>
+        {% endif %}
+      </section>
+
+      <details class="raw-details">
+        <summary>Raw FastPath JSON</summary>
+        <pre>{{ view.fastpath_result.get('raw') | tojson(indent=2) }}</pre>
+      </details>
+      {% endif %}
+
+      <section class="panel">
+        <div class="panel-header">
           <h2>Проверка Source Selector / route-card</h2>
           <span class="small-muted">route-shortcut + source/select</span>
         </div>
