@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HDC — Конфиг</title>
+  <style>
+{% include "inline.css" %}
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">HDC</div>
+        <div>
+          <div class="brand-title">Home Dialog</div>
+          <div class="brand-subtitle">Console</div>
+        </div>
+      </div>
+      <nav class="nav">
+        {% for item in view.nav_items %}
+        <a class="nav-item {{ 'active' if item.active else '' }} {{ 'disabled' if item.get('disabled') else '' }}" href="{{ item.href }}">{{ item.title }}</a>
+        {% endfor %}
+      </nav>
+      <div class="sidebar-footer">
+        <span>HDC v{{ hdc_version }}</span>
+        <span>Config</span>
+      </div>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Home Dialog Console</p>
+          <h1>Конфиг</h1>
+          <p class="muted">Read-only просмотр настроек, которые HDC видит через собственные options и diagnostics dialog-service. Секреты не отображаются.</p>
+        </div>
+        <div class="topbar-actions">
+          <div class="updated">Обновлено: <strong>{{ view.updated_at }}</strong></div>
+          <button type="button" class="refresh" onclick="window.location.reload()">Обновить</button>
+        </div>
+      </header>
+
+      <section class="status-hero ok">
+        <div>
+          <div class="status-kicker">Read-only</div>
+          <h2>Безопасный просмотр конфигурации</h2>
+          <p>Экран ничего не меняет, не вызывает действия Home Assistant и маскирует потенциальные секреты.</p>
+        </div>
+        <div class="status-pill">safe</div>
+      </section>
+
+      <section class="panel summary-panel">
+        <div class="panel-header">
+          <h2>Кратко</h2>
+          <span class="small-muted">{{ view.updated_at_full }}</span>
+        </div>
+        <div class="summary-tiles">
+          {% for tile in view.summary_tiles %}
+          <div class="summary-tile">
+            <span>{{ tile.label }}</span>
+            <strong>{{ tile.value }}</strong>
+            <small>{{ tile.hint }}</small>
+          </div>
+          {% endfor %}
+        </div>
+      </section>
+
+      {% for section in view.sections %}
+      <section class="panel">
+        <div class="panel-header">
+          <h2>{{ section.title }}</h2>
+          <span class="small-muted">{{ section.description }}</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Параметр</th>
+                <th>Значение</th>
+                <th>Комментарий</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in section.rows %}
+              <tr>
+                <td>{{ row.name }}</td>
+                <td>{{ row.value }}</td>
+                <td>{{ row.hint }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      {% endfor %}
+
+      <details class="raw-details">
+        <summary>Raw config JSON</summary>
+        <pre>{{ view.raw | tojson(indent=2) }}</pre>
+      </details>
+    </main>
+  </div>
+
+<script>
+(function () {
+  function hdcBasePath() {
+    const path = window.location.pathname || "/";
+    const marker = "/api/hassio_ingress/";
+    const pos = path.indexOf(marker);
+
+    if (pos >= 0) {
+      const after = path.slice(pos + marker.length);
+      const token = after.split("/")[0];
+      if (token) {
+        return path.slice(0, pos + marker.length + token.length + 1);
+      }
+    }
+
+    return "/";
+  }
+
+  function cleanRoute(value) {
+    return String(value || "")
+      .replace(/^https?:\/\//, "http://")
+      .replace(/^(\.\/|\.\.\/)+/, "")
+      .replace(/^\/+/, "");
+  }
+
+  const base = hdcBasePath();
+
+  document.querySelectorAll("a[href]").forEach(function (item) {
+    const raw = item.getAttribute("href") || "";
+    if (!raw || raw.startsWith("#") || raw.startsWith("http://") || raw.startsWith("https://") || raw.startsWith("mailto:")) {
+      return;
+    }
+    item.setAttribute("href", base + cleanRoute(raw));
+  });
+
+  document.querySelectorAll("form[action]").forEach(function (item) {
+    const raw = item.getAttribute("action") || "";
+    if (!raw || raw.startsWith("#") || raw.startsWith("http://") || raw.startsWith("https://")) {
+      return;
+    }
+    item.setAttribute("action", base + cleanRoute(raw));
+  });
+})();
+</script>
+
+</body>
+</html>

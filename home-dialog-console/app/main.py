@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.36"
+APP_VERSION = "0.1.37"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 DEFAULT_RETRIEVAL_SERVICE_URL = "http://192.168.1.138:8085"
@@ -71,6 +71,7 @@ def nav_items(active: str = "overview") -> list[dict[str, Any]]:
         {"id": "overview", "title": "Обзор", "href": ".", "active": active == "overview", "disabled": False},
         {"id": "regression", "title": "Тесты", "href": "regression", "active": active == "regression", "disabled": False},
         {"id": "environment", "title": "Окружение", "href": "environment", "active": active == "environment", "disabled": False},
+        {"id": "config", "title": "Конфиг", "href": "config", "active": active == "config", "disabled": False},
         {"id": "qdrant", "title": "Qdrant", "href": "qdrant", "active": active == "qdrant", "disabled": False},
         {"id": "prompts", "title": "Промты", "href": "#prompts", "active": active == "prompts", "disabled": True},
         {"id": "analyzers", "title": "Анализаторы", "href": "#analyzers", "active": active == "analyzers", "disabled": True},
@@ -445,6 +446,149 @@ def build_environment_view() -> dict[str, Any]:
             "log_level": options.get("log_level"),
             "utc_now": now_utc.isoformat(),
             "local_now": local_now.isoformat(),
+        },
+    }
+
+
+def mask_config_value(name: str, value: Any) -> str:
+    key = str(name or "").lower()
+    if any(part in key for part in ["token", "secret", "password", "passwd", "api_key", "apikey", "key"]):
+        if value in [None, "", False]:
+            return "не задано"
+        return "******"
+    if value is None:
+        return "—"
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
+
+
+def flatten_config(prefix: str, value: Any, depth: int = 0, max_depth: int = 2) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+
+    if isinstance(value, dict) and depth < max_depth:
+        for key in sorted(value.keys()):
+            name = f"{prefix}.{key}" if prefix else str(key)
+            rows.extend(flatten_config(name, value.get(key), depth + 1, max_depth))
+        return rows
+
+    if isinstance(value, list):
+        if len(value) <= 8 and all(not isinstance(item, (dict, list)) for item in value):
+            rows.append({"name": prefix, "value": mask_config_value(prefix, value), "hint": "list"})
+        else:
+            rows.append({"name": prefix, "value": f"list[{len(value)}]", "hint": "список скрыт, подробности в Raw JSON"})
+        return rows
+
+    rows.append({"name": prefix, "value": mask_config_value(prefix, value), "hint": type(value).__name__})
+    return rows
+
+
+def find_check(checks: list[dict[str, Any]], check_id: str) -> dict[str, Any]:
+    for check in checks:
+        if str(check.get("id") or "") == check_id:
+            return check
+    return {}
+
+
+def check_config_rows(check: dict[str, Any]) -> list[dict[str, Any]]:
+    if not check:
+        return [{"name": "status", "value": "нет данных", "hint": "check не найден"}]
+
+    rows = [
+        {"name": "id", "value": check.get("id") or "—", "hint": "check id"},
+        {"name": "title", "value": check.get("title") or "—", "hint": "название"},
+        {"name": "ok", "value": str(check.get("ok")), "hint": "результат проверки"},
+        {"name": "status", "value": check.get("status") or "—", "hint": "статус"},
+        {"name": "message", "value": check.get("message") or "—", "hint": "последнее сообщение"},
+    ]
+
+    details = check.get("details") if isinstance(check.get("details"), dict) else {}
+    for row in flatten_config("details", details, max_depth=2):
+        if len(str(row.get("value") or "")) > 500:
+            row["value"] = str(row["value"])[:500] + "…"
+        rows.append(row)
+
+    return rows
+
+
+async def build_config_view() -> dict[str, Any]:
+    options = load_options()
+    diagnostics = await build_diagnostics()
+    checks = diagnostics.get("checks") if isinstance(diagnostics.get("checks"), list) else []
+
+    dialog_service_url = str(options.get("dialog_service_url") or DEFAULT_DIALOG_SERVICE_URL).rstrip("/")
+    retrieval_service_url = str(options.get("retrieval_service_url") or DEFAULT_RETRIEVAL_SERVICE_URL).rstrip("/")
+
+    hdc_rows = [
+        {"name": "APP_VERSION", "value": APP_VERSION, "hint": "версия HDC"},
+        {"name": "CONFIG_PATH", "value": str(CONFIG_PATH), "hint": f"options.json: {path_state(CONFIG_PATH)}"},
+        {"name": "dialog_service_url", "value": dialog_service_url, "hint": "из options/env/default"},
+        {"name": "retrieval_service_url", "value": retrieval_service_url, "hint": "из options/env/default"},
+        {"name": "log_level", "value": str(options.get("log_level") or "info"), "hint": "уровень логирования"},
+    ]
+
+    diagnostics_rows = [
+        {"name": "service", "value": diagnostics.get("service") or "—", "hint": "diagnostics service"},
+        {"name": "version", "value": diagnostics.get("version") or diagnostics.get("backend_version") or "—", "hint": "версия dialog-service, если есть"},
+        {"name": "status", "value": diagnostics.get("status") or "—", "hint": "общий статус"},
+        {"name": "env", "value": diagnostics.get("env") or "—", "hint": "окружение"},
+        {"name": "generated_at", "value": format_dt(diagnostics.get("generated_at")), "hint": "время формирования diagnostics"},
+        {"name": "checks_count", "value": str(len(checks)), "hint": "число diagnostics checks"},
+    ]
+
+    source_selector_check = find_check(checks, "source_selector")
+    qdrant_check = find_check(checks, "qdrant")
+    config_db_check = find_check(checks, "config_db")
+    action_executor_check = find_check(checks, "action_executor")
+
+    sections = [
+        {
+            "title": "HDC options",
+            "description": "Публичные настройки HDC без секретов.",
+            "rows": hdc_rows,
+        },
+        {
+            "title": "dialog-service diagnostics",
+            "description": "Сводка, которую HDC получает от dialog-service.",
+            "rows": diagnostics_rows,
+        },
+        {
+            "title": "Source Selector",
+            "description": "Настройки и состояние Source Selector из diagnostics check.",
+            "rows": check_config_rows(source_selector_check),
+        },
+        {
+            "title": "Qdrant",
+            "description": "Настройки и состояние Qdrant из diagnostics check.",
+            "rows": check_config_rows(qdrant_check),
+        },
+        {
+            "title": "Config DB",
+            "description": "Состояние SQLite config DB из diagnostics check.",
+            "rows": check_config_rows(config_db_check),
+        },
+        {
+            "title": "Action Executor",
+            "description": "Состояние безопасного исполнителя действий.",
+            "rows": check_config_rows(action_executor_check),
+        },
+    ]
+
+    return {
+        "nav_items": nav_items("config"),
+        "updated_at": format_time(datetime.now(timezone.utc).isoformat()),
+        "updated_at_full": format_dt(datetime.now(timezone.utc).isoformat()),
+        "summary_tiles": [
+            {"label": "Mode", "value": "read-only", "hint": "без изменения настроек"},
+            {"label": "Checks", "value": str(len(checks)), "hint": "diagnostics"},
+            {"label": "HDC", "value": APP_VERSION, "hint": "версия"},
+            {"label": "Secrets", "value": "masked", "hint": "секреты скрыты"},
+        ],
+        "sections": sections,
+        "raw": {
+            "options": public_options(options),
+            "diagnostics": diagnostics,
+            "checks": checks,
         },
     }
 
@@ -916,6 +1060,12 @@ async def index(request: Request) -> HTMLResponse:
 async def environment(request: Request) -> HTMLResponse:
     view = build_environment_view()
     return templates.TemplateResponse(request, "environment.html", {"view": view, "options": view["options"], "hdc_version": APP_VERSION})
+
+
+@app.get("/config", response_class=HTMLResponse)
+async def config_browser(request: Request) -> HTMLResponse:
+    view = await build_config_view()
+    return templates.TemplateResponse(request, "config.html", {"view": view, "hdc_version": APP_VERSION})
 
 
 @app.get("/qdrant", response_class=HTMLResponse)
