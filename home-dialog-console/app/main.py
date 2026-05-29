@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.30"
+APP_VERSION = "0.1.31"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 DEFAULT_RETRIEVAL_SERVICE_URL = "http://192.168.1.138:8085"
@@ -872,6 +872,7 @@ async def qdrant_card_view(request: Request, source_id: str) -> HTMLResponse:
         "elapsed_ms": elapsed_ms,
         "error": error or ("" if source else "Карточка не найдена."),
         "save_result": None,
+        "reindex_result": None,
         "retrieval_service_url": retrieval_service_url,
         "updated_at": format_time(datetime.now(timezone.utc).isoformat()),
         "updated_at_full": format_dt(datetime.now(timezone.utc).isoformat()),
@@ -891,6 +892,7 @@ async def qdrant_card_save(request: Request, source_id: str) -> HTMLResponse:
     body = await request.body()
     parsed_form = parse_qs(body.decode("utf-8"), keep_blank_values=True)
     form = {key: values[-1] if values else "" for key, values in parsed_form.items()}
+    action = str(form.get("action") or "save")
     card_payload = source_card_form_payload(form, source_id)
 
     ok, status_code, elapsed_ms, payload, error = await put_json(
@@ -901,6 +903,22 @@ async def qdrant_card_save(request: Request, source_id: str) -> HTMLResponse:
 
     data = payload if isinstance(payload, dict) else {}
     source = data.get("source") if isinstance(data.get("source"), dict) else card_payload
+
+    reindex_result = None
+    if ok and action == "save_reindex":
+        ri_ok, ri_status_code, ri_elapsed_ms, ri_payload, ri_error = await post_json(
+            f"{retrieval_service_url}/source/index",
+            {},
+            timeout=180.0,
+        )
+        ri_data = ri_payload if isinstance(ri_payload, dict) else {}
+        reindex_result = {
+            "ok": ri_ok and bool(ri_data.get("ok", ri_ok)),
+            "status_code": ri_status_code,
+            "elapsed_ms": ri_elapsed_ms,
+            "payload": ri_data,
+            "error": ri_error or (ri_data.get("error") if isinstance(ri_data, dict) else "") or "",
+        }
 
     view = {
         "nav_items": nav_items("qdrant"),
@@ -916,6 +934,7 @@ async def qdrant_card_save(request: Request, source_id: str) -> HTMLResponse:
             "elapsed_ms": elapsed_ms,
             "error": error or "",
         },
+        "reindex_result": reindex_result,
         "retrieval_service_url": retrieval_service_url,
         "updated_at": format_time(datetime.now(timezone.utc).isoformat()),
         "updated_at_full": format_dt(datetime.now(timezone.utc).isoformat()),

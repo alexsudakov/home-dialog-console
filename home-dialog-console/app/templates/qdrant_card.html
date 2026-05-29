@@ -126,6 +126,23 @@
       </section>
       {% endif %}
 
+      {% if view.reindex_result %}
+      <section class="status-hero {{ 'ok' if view.reindex_result.ok else 'bad' }}">
+        <div>
+          <div class="status-kicker">Reindex result</div>
+          <h2>{{ 'Qdrant переиндексирован' if view.reindex_result.ok else 'Ошибка переиндексации' }}</h2>
+          <p>
+            HTTP {{ view.reindex_result.status_code or '—' }} · {{ view.reindex_result.elapsed_ms }} мс
+            · collection={{ view.reindex_result.payload.collection or '—' }}
+            · sources={{ view.reindex_result.payload.sources_count or '—' }}
+            · chunks={{ view.reindex_result.payload.chunks_count or '—' }}
+            {% if view.reindex_result.error %} · {{ view.reindex_result.error }}{% endif %}
+          </p>
+        </div>
+        <div class="status-pill">{{ 'ok' if view.reindex_result.ok else 'error' }}</div>
+      </section>
+      {% endif %}
+
       {% if view.error %}
       <section class="status-hero bad">
         <div>
@@ -251,7 +268,7 @@
 
           <div class="form-actions">
             <button class="refresh" type="submit" name="action" value="save">Сохранить</button>
-            <button class="refresh" type="button" disabled>Сохранить и переиндексировать</button>
+            <button class="refresh" type="submit" name="action" value="save_reindex">Сохранить и переиндексировать</button>
             <button class="refresh" type="button" disabled>{{ 'Отключить карточку' if view.source.enabled else 'Включить карточку' }}</button>
           </div>
         </form>
