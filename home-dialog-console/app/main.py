@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.42"
+APP_VERSION = "0.1.43"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 DEFAULT_RETRIEVAL_SERVICE_URL = "http://192.168.1.138:8085"
@@ -1411,7 +1411,7 @@ def build_query_summary(fastpath_result: dict[str, Any], resolver_result: dict[s
                 "intent": "Тип запроса",
                 "target": "Цель",
                 "state_only": "Только чтение",
-                "prepared": "Действие подготовлено",
+                "prepared": "Подготовка действия",
                 "note": "Комментарий",
             }),
         },
