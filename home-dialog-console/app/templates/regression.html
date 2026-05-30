@@ -198,6 +198,35 @@
       }
     }
 
+
+    .example-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .example-button {
+      border: 1px solid #dbe4f0;
+      background: #f8fafc;
+      color: #1f2937;
+      border-radius: 999px;
+      padding: 8px 12px;
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+    }
+
+    .example-button:hover {
+      background: #eef6ff;
+      border-color: #b7d4ff;
+    }
+
+    .example-button:active {
+      transform: translateY(1px);
+    }
+
   </style>
 </head>
 <body>
@@ -295,7 +324,7 @@
         </div>
         <p class="muted">Один безопасный тест для пользовательской фразы. HDC проверяет FastPath / target_resolver_v2 и Source Selector / route-card, но ничего не выполняет в Home Assistant.</p>
 
-        <form method="post" action="regression/query/check">
+        <form id="query-check-form" method="post" action="regression/query/check">
           <label for="query-question">Фраза</label>
           <textarea id="query-question" name="question" rows="3" class="hdc-textarea" placeholder="Например: что с люстрой?">{{ view.query_value }}</textarea>
           <div class="form-actions">
@@ -303,18 +332,20 @@
           </div>
         </form>
 
-        <details class="raw-details">
-          <summary>Примеры запросов</summary>
-          <div class="table-wrap">
-            <table>
-              <tbody>
-                {% for example in view.query_check_examples %}
-                <tr><td>{{ example }}</td></tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        </details>
+        <div class="example-buttons" aria-label="Примеры запросов">
+          {% for example in view.query_check_examples %}
+          <button class="example-button" type="button" onclick="runQueryExample({{ example | tojson }})">{{ example }}</button>
+          {% endfor %}
+        </div>
+
+        <script>
+          function runQueryExample(text) {
+            const textarea = document.getElementById('query-question');
+            const form = document.getElementById('query-check-form');
+            if (textarea) textarea.value = text;
+            if (form) form.submit();
+          }
+        </script>
       </section>
 
       {% if view.query_summary.get('has_result') %}

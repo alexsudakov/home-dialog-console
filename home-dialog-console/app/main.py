@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.43"
+APP_VERSION = "0.1.44"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 DEFAULT_RETRIEVAL_SERVICE_URL = "http://192.168.1.138:8085"
@@ -1034,13 +1034,11 @@ FASTPATH_EXAMPLES = [
 
 QUERY_CHECK_EXAMPLES = [
     "что с люстрой?",
-    "что с вытяжкой на кухне?",
-    "почему вытяжка не включилась?",
-    "Была ли какая-то тревога дома?",
-    "Где сейчас Ира?",
-    "Где была Ира сегодня?",
-    "Когда Ира ушла?",
+    "что с вытяжкой?",
+    "почему вытяжка включилась?",
+    "что происходило дома за последние два часа?",
     "включи свет в ванной",
+    "где сейчас Ира?",
 ]
 
 
