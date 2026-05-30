@@ -140,11 +140,11 @@
           <section class="panel">
             <div class="panel-header">
               <h2>Список промтов</h2>
-              <span class="small-muted">{{ view.items|length }} файлов</span>
+              <span class="small-muted">{{ view.prompt_items|length }} файлов</span>
             </div>
 
-            {% if view.items %}
-              {% for item in view.items %}
+            {% if view.prompt_items %}
+              {% for item in view.prompt_items %}
               <article class="prompt-card">
                 <h3>{{ item.title }}</h3>
                 <div class="prompt-meta">

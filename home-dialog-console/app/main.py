@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.46"
+APP_VERSION = "0.1.47"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 DEFAULT_RETRIEVAL_SERVICE_URL = "http://192.168.1.138:8085"
@@ -701,7 +701,7 @@ async def fetch_source_card_audit(retrieval_service_url: str, source_id: str, li
         "error": error or (data.get("detail") if isinstance(data, dict) else "") or data.get("error") or "",
         "source_id": data.get("source_id") or source_id,
         "limit": data.get("limit") or limit,
-        "items": items,
+        "prompt_items": items,
     }
 
 
@@ -1676,7 +1676,7 @@ async def build_prompts_view(prompt_id: str | None = None) -> dict[str, Any]:
         "status_code": status_code,
         "elapsed_ms": elapsed_ms,
         "error": error or data.get("detail") or data.get("error") or "",
-        "items": items,
+        "prompt_items": items,
         "total": total,
         "groups": data.get("groups") or {},
         "summary_tiles": prompts_group_tiles(data.get("groups") or {}, total),
