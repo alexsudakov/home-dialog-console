@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.48"
+APP_VERSION = "0.1.49"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 DEFAULT_RETRIEVAL_SERVICE_URL = "http://192.168.1.138:8085"
@@ -1734,8 +1734,9 @@ async def prompt_diff_page(request: Request, prompt_id: str) -> HTMLResponse:
 
 @app.post("/prompts/{prompt_id}/draft")
 async def prompt_save_draft_page(request: Request, prompt_id: str) -> RedirectResponse:
-    form = await request.form()
-    content = str(form.get("content") or "")
+    body = await request.body()
+    parsed = parse_qs(body.decode("utf-8", errors="replace"), keep_blank_values=True)
+    content = str((parsed.get("content") or [""])[0])
 
     options = load_options()
     dialog_service_url = str(options["dialog_service_url"]).rstrip("/")
