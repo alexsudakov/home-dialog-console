@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.45"
+APP_VERSION = "0.1.46"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 DEFAULT_RETRIEVAL_SERVICE_URL = "http://192.168.1.138:8085"
@@ -73,7 +73,7 @@ def nav_items(active: str = "overview") -> list[dict[str, Any]]:
         {"id": "environment", "title": "Окружение", "href": "environment", "active": active == "environment", "disabled": False},
         {"id": "config", "title": "Конфиг", "href": "config", "active": active == "config", "disabled": False},
         {"id": "qdrant", "title": "Qdrant", "href": "qdrant", "active": active == "qdrant", "disabled": False},
-        {"id": "prompts", "title": "Промты", "href": "#prompts", "active": active == "prompts", "disabled": True},
+        {"id": "prompts", "title": "Промты", "href": "prompts", "active": active == "prompts", "disabled": False},
         {"id": "analyzers", "title": "Анализаторы", "href": "#analyzers", "active": active == "analyzers", "disabled": True},
         {"id": "actions", "title": "Действия", "href": "#actions", "active": active == "actions", "disabled": True},
         {"id": "objects", "title": "Объекты", "href": "#objects", "active": active == "objects", "disabled": True},
@@ -1595,6 +1595,109 @@ async def run_regression_group(group: str) -> tuple[dict[str, Any] | None, str]:
     }
     log_regression_result(group, fallback_payload, error=error or f"HTTP {status_code}")
     return fallback_payload, error or f"HTTP {status_code}"
+
+
+def compact_prompt_items(items: Any) -> list[dict[str, Any]]:
+    if not isinstance(items, list):
+        return []
+
+    rows: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        rows.append({
+            "id": item.get("id") or "—",
+            "title": item.get("title") or item.get("filename") or "—",
+            "group": item.get("group") or "other",
+            "filename": item.get("filename") or "—",
+            "relative_path": item.get("relative_path") or item.get("path") or "—",
+            "size_bytes": item.get("size_bytes") or 0,
+            "line_count": item.get("line_count") or 0,
+            "mtime": format_dt(item.get("mtime"), "нет данных"),
+            "sha256": item.get("sha256") or "—",
+            "preview": item.get("preview") or "",
+        })
+    return rows
+
+
+def prompts_group_tiles(groups: Any, total: int) -> list[dict[str, str]]:
+    group_data = groups if isinstance(groups, dict) else {}
+    names = [
+        ("planner", "Planner"),
+        ("answerer", "Answerer"),
+        ("source_selector", "Source Selector"),
+        ("analyzers", "Анализаторы"),
+        ("system", "System"),
+        ("other", "Other"),
+    ]
+    tiles = [{"label": "Всего", "value": str(total), "hint": "prompt-файлов"}]
+    for key, label in names:
+        tiles.append({"label": label, "value": str(group_data.get(key, 0)), "hint": key})
+    return tiles
+
+
+async def build_prompts_view(prompt_id: str | None = None) -> dict[str, Any]:
+    options = load_options()
+    dialog_service_url = str(options["dialog_service_url"]).rstrip("/")
+
+    ok, status_code, elapsed_ms, payload, error = await get_json(
+        f"{dialog_service_url}/admin/prompts",
+        timeout=20.0,
+    )
+    data = payload if isinstance(payload, dict) else {}
+    items = compact_prompt_items(data.get("items") or [])
+    total = int(data.get("count") or len(items))
+
+    selected_prompt = None
+    selected_error = ""
+
+    if prompt_id:
+        detail_ok, detail_status, detail_elapsed_ms, detail_payload, detail_error = await get_json(
+            f"{dialog_service_url}/admin/prompts/{prompt_id}",
+            timeout=20.0,
+        )
+        detail_data = detail_payload if isinstance(detail_payload, dict) else {}
+        selected_prompt = detail_data.get("prompt") if isinstance(detail_data.get("prompt"), dict) else None
+        if selected_prompt:
+            selected_prompt = {
+                **selected_prompt,
+                "mtime": format_dt(selected_prompt.get("mtime"), "нет данных"),
+                "elapsed_ms": detail_elapsed_ms,
+                "status_code": detail_status,
+            }
+        if not selected_prompt:
+            selected_error = detail_error or detail_data.get("detail") or f"HTTP {detail_status}"
+
+    return {
+        "nav_items": nav_items("prompts"),
+        "updated_at": format_time(datetime.now(timezone.utc).isoformat()),
+        "dialog_service_url": dialog_service_url,
+        "ok": ok and bool(data.get("ok", ok)),
+        "status_code": status_code,
+        "elapsed_ms": elapsed_ms,
+        "error": error or data.get("detail") or data.get("error") or "",
+        "items": items,
+        "total": total,
+        "groups": data.get("groups") or {},
+        "summary_tiles": prompts_group_tiles(data.get("groups") or {}, total),
+        "selected_prompt": selected_prompt,
+        "selected_error": selected_error,
+        "raw": data,
+    }
+
+
+
+@app.get("/prompts", response_class=HTMLResponse)
+async def prompts_page(request: Request) -> HTMLResponse:
+    view = await build_prompts_view()
+    return templates.TemplateResponse(request, "prompts.html", {"view": view, "options": public_options(load_options()), "hdc_version": APP_VERSION})
+
+
+@app.get("/prompts/{prompt_id}", response_class=HTMLResponse)
+async def prompt_detail_page(request: Request, prompt_id: str) -> HTMLResponse:
+    view = await build_prompts_view(prompt_id=prompt_id)
+    return templates.TemplateResponse(request, "prompts.html", {"view": view, "options": public_options(load_options()), "hdc_version": APP_VERSION})
+
 
 
 @app.get("/health")

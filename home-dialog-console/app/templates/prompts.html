@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HDC — Промты</title>
+  <style>
+{% include "inline.css" %}
+    .prompt-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.45fr);
+      gap: 16px;
+    }
+
+    .prompt-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      background: #fff;
+      padding: 14px;
+      margin-bottom: 10px;
+    }
+
+    .prompt-card h3 {
+      margin: 0 0 6px;
+      font-size: 15px;
+      overflow-wrap: anywhere;
+    }
+
+    .prompt-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 8px 0;
+    }
+
+    .prompt-pill {
+      border-radius: 999px;
+      background: #eef2ff;
+      color: #1d4ed8;
+      padding: 3px 8px;
+      font-size: 12px;
+    }
+
+    .prompt-preview {
+      color: #475569;
+      font-size: 12px;
+      white-space: pre-wrap;
+      max-height: 84px;
+      overflow: hidden;
+      border-left: 3px solid #e5e7eb;
+      padding-left: 10px;
+      margin: 10px 0;
+    }
+
+    .prompt-content {
+      background: #0f172a;
+      color: #e5e7eb;
+      border-radius: 16px;
+      padding: 16px;
+      overflow: auto;
+      white-space: pre-wrap;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      max-height: 640px;
+    }
+
+    .prompt-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    @media (max-width: 1100px) {
+      .prompt-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">HDC</div>
+        <div>
+          <div class="brand-title">Home Dialog</div>
+          <div class="brand-subtitle">Console</div>
+        </div>
+      </div>
+      <nav class="nav">
+        {% for item in view.nav_items %}
+        <a class="nav-item {{ 'active' if item.active else '' }} {{ 'disabled' if item.get('disabled') else '' }}" href="{{ item.href }}">{{ item.title }}</a>
+        {% endfor %}
+      </nav>
+      <div class="sidebar-footer">
+        <span>HDC v{{ hdc_version }}</span>
+        <span>Prompts</span>
+      </div>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Home Dialog Console</p>
+          <h1>Промты</h1>
+          <p class="muted">Read-only просмотр prompt-файлов dialog-service. Редактирование на этом этапе отключено.</p>
+        </div>
+        <div class="topbar-actions">
+          <div class="updated">Обновлено: <strong>{{ view.updated_at }}</strong></div>
+          <button type="button" class="refresh" onclick="window.location.reload()">Обновить</button>
+        </div>
+      </header>
+
+      <section class="status-hero {{ 'ok' if view.ok else 'warning' }}">
+        <div>
+          <div class="status-kicker">read-only</div>
+          <h2>{% if view.ok %}Промты доступны{% else %}Промты недоступны{% endif %}</h2>
+          <p>HDC читает список промтов через dialog-service: <code>{{ view.dialog_service_url }}/admin/prompts</code></p>
+          {% if view.error %}
+          <p class="muted">Ошибка: {{ view.error }}</p>
+          {% endif %}
+        </div>
+        <div class="status-pill">HTTP {{ view.status_code or '—' }} · {{ view.elapsed_ms }} мс</div>
+      </section>
+
+      <section class="summary-tiles">
+        {% for tile in view.summary_tiles %}
+        <div class="summary-tile">
+          <span>{{ tile.label }}</span>
+          <strong>{{ tile.value }}</strong>
+          <small>{{ tile.hint }}</small>
+        </div>
+        {% endfor %}
+      </section>
+
+      <section class="prompt-layout">
+        <div>
+          <section class="panel">
+            <div class="panel-header">
+              <h2>Список промтов</h2>
+              <span class="small-muted">{{ view.items|length }} файлов</span>
+            </div>
+
+            {% if view.items %}
+              {% for item in view.items %}
+              <article class="prompt-card">
+                <h3>{{ item.title }}</h3>
+                <div class="prompt-meta">
+                  <span class="prompt-pill">{{ item.group }}</span>
+                  <span class="prompt-pill">{{ item.filename }}</span>
+                  <span class="prompt-pill">{{ item.line_count }} строк</span>
+                  <span class="prompt-pill">{{ item.size_bytes }} байт</span>
+                </div>
+                <p class="muted">{{ item.relative_path }}</p>
+                {% if item.preview %}
+                <div class="prompt-preview">{{ item.preview }}</div>
+                {% endif %}
+                <div class="prompt-actions">
+                  <a class="refresh" href="prompts/{{ item.id }}">Открыть</a>
+                </div>
+              </article>
+              {% endfor %}
+            {% else %}
+              <p class="empty">Prompt-файлы не найдены или API dialog-service ещё не обновлён.</p>
+            {% endif %}
+          </section>
+        </div>
+
+        <div>
+          <section class="panel">
+            <div class="panel-header">
+              <h2>Просмотр промта</h2>
+              <span class="small-muted">read-only</span>
+            </div>
+
+            {% if view.selected_error %}
+              <p class="empty">Ошибка чтения промта: {{ view.selected_error }}</p>
+            {% endif %}
+
+            {% if view.selected_prompt %}
+              <h3>{{ view.selected_prompt.title }}</h3>
+              <dl class="info-list">
+                <div><dt>Группа</dt><dd>{{ view.selected_prompt.group }}</dd></div>
+                <div><dt>Файл</dt><dd>{{ view.selected_prompt.relative_path }}</dd></div>
+                <div><dt>Размер</dt><dd>{{ view.selected_prompt.size_bytes }} байт · {{ view.selected_prompt.line_count }} строк</dd></div>
+                <div><dt>Изменён</dt><dd>{{ view.selected_prompt.mtime }}</dd></div>
+                <div><dt>SHA256</dt><dd>{{ view.selected_prompt.sha256 }}</dd></div>
+              </dl>
+              <pre class="prompt-content">{{ view.selected_prompt.content }}</pre>
+            {% else %}
+              <p class="empty">Выберите промт из списка слева.</p>
+            {% endif %}
+          </section>
+
+          <details class="raw-details">
+            <summary>Raw JSON</summary>
+            <pre>{{ view.raw | tojson(indent=2) }}</pre>
+          </details>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
