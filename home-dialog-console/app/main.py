@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.40"
+APP_VERSION = "0.1.41"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 DEFAULT_RETRIEVAL_SERVICE_URL = "http://192.168.1.138:8085"
@@ -1147,6 +1147,289 @@ async def run_fastpath_check(dialog_service_url: str, question: str) -> dict[str
     }
 
 
+
+def is_meaningful(value: Any) -> bool:
+    if value is None:
+        return False
+    text = str(value).strip()
+    return bool(text and text != "—" and text.lower() not in {"none", "null"})
+
+
+def bool_label(value: Any) -> str:
+    if value is True:
+        return "да"
+    if value is False:
+        return "нет"
+    return "—"
+
+
+def make_detail_rows(values: dict[str, Any], labels: dict[str, str]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for key, label in labels.items():
+        value = values.get(key)
+        if value is None:
+            value_text = "—"
+        elif isinstance(value, bool):
+            value_text = bool_label(value)
+        else:
+            value_text = str(value)
+        rows.append({"label": label, "value": value_text})
+    return rows
+
+
+def route_step(status: str, title: str, subtitle: str, badge: str, tone: str = "neutral") -> dict[str, str]:
+    return {
+        "status": status,
+        "title": title,
+        "subtitle": subtitle,
+        "badge": badge,
+        "tone": tone,
+    }
+
+
+def build_query_summary(fastpath_result: dict[str, Any], resolver_result: dict[str, Any]) -> dict[str, Any]:
+    if not fastpath_result.get("has_result") and not resolver_result.get("has_result"):
+        return {
+            "has_result": False,
+            "status_class": "neutral",
+            "status_title": "Запрос ещё не проверялся",
+            "route": "—",
+            "request_type": "—",
+            "action": "—",
+            "reason": "Введите фразу и нажмите “Проверить запрос”.",
+            "main_target": "—",
+            "fix_hint": "После проверки здесь появится краткий итог и подсказка, что исправлять.",
+            "steps": [],
+            "detail_cards": [],
+        }
+
+    question = str(fastpath_result.get("question") or resolver_result.get("question") or "").strip()
+    question_lower = question.lower()
+
+    fastparse = fastpath_result.get("fastparse") if isinstance(fastpath_result.get("fastparse"), dict) else {}
+    prepare = fastpath_result.get("prepare") if isinstance(fastpath_result.get("prepare"), dict) else {}
+    source = resolver_result.get("source") if isinstance(resolver_result.get("source"), dict) else {}
+    route = resolver_result.get("route") if isinstance(resolver_result.get("route"), dict) else {}
+
+    fp_matched = fastparse.get("matched") is True
+    fp_intent = str(fastparse.get("intent") or "—")
+    fp_mode = str(fastparse.get("mode") or "—")
+    object_text = str(fastparse.get("object_text") or "—")
+    entity_ids = str(fastparse.get("entity_ids") or "—")
+    match_reasons = str(fastparse.get("match_reasons") or "—")
+
+    state_only = prepare.get("state_only") is True
+    prepared = prepare.get("prepared") is True
+    prepare_note = str(prepare.get("note") or "—")
+
+    top_source_id = str(source.get("top_source_id") or "—")
+    top_plan_type = str(source.get("top_plan_type") or "—")
+    top_analyzer_id = str(source.get("top_analyzer_id") or "—")
+    top_score = source.get("top_score")
+
+    route_accepted = route.get("accepted") is True
+    route_reject_reason = str(route.get("reject_reason") or "—")
+
+    reason_question = any(word in question_lower for word in ["почему", "причин", "из-за чего", "зачем"])
+    overview_question = any(word in question_lower for word in ["что происходило", "что было", "за последние", "за сегодня", "обзор"])
+    hood_question = "вытяж" in question_lower
+
+    # Action / execution status
+    if state_only:
+        action_label = "Только чтение"
+        action_text = "действие не выполняется"
+        action_tone = "ok"
+    elif prepared:
+        action_label = "Подготовлено"
+        action_text = "команда распознана, но на странице тестов не выполняется"
+        action_tone = "warning"
+    elif fp_intent == "action":
+        action_label = "Не подготовлено"
+        action_text = prepare_note if is_meaningful(prepare_note) else "действие не подготовлено"
+        action_tone = "warning"
+    else:
+        action_label = "Не выполняется"
+        action_text = "это вопрос, а не команда"
+        action_tone = "ok"
+
+    # Processing decision
+    if reason_question and hood_question and (top_source_id in {"kitchen_hood_reasoning", "hood_operation", "ventilation_general"} or "hood" in top_source_id or "вытяж" in top_source_id):
+        status_class = "warning"
+        status_title = "Запрос требует анализа причины"
+        route_label = f"Source Selector → {top_source_id}"
+        request_type = "вопрос о причине события"
+        processing_label = "Анализ причины"
+        processing_badge = top_source_id
+        processing_tone = "warning"
+        main_target = top_analyzer_id if is_meaningful(top_analyzer_id) else top_source_id
+        reason = "вопрос относится к причине события и работе вытяжки"
+        fix_hint = "Если выбран неверный анализатор — править карточку Source Selector и её positive/negative examples."
+    elif overview_question:
+        status_class = "warning"
+        status_title = "Запрос требует планирования"
+        route_label = "Planner"
+        request_type = "обзор событий за период"
+        processing_label = "Планирование"
+        processing_badge = "Planner"
+        processing_tone = "warning"
+        main_target = "источники данных за период"
+        reason = "вопрос широкий: нужен выбор источников и периода времени"
+        fix_hint = "Если источники выбраны неверно — править карточки Source Selector, описание источников или planner prompt."
+    elif fp_matched and fp_intent == "state_query":
+        status_class = "ok"
+        status_title = "Запрос понятен"
+        route_label = "FastPath"
+        request_type = "вопрос о текущем состоянии"
+        processing_label = "Ответ по состоянию"
+        processing_badge = "state_query"
+        processing_tone = "neutral"
+        main_target = entity_ids.split(",")[0].strip() if is_meaningful(entity_ids) else object_text
+        reason = f"найдено совпадение: {match_reasons}"
+        fix_hint = "Маршрут выглядит правильно. Можно добавить эту фразу в regression-набор."
+    elif route_accepted:
+        status_class = "ok"
+        status_title = "Запрос понятен"
+        route_label = f"Source Selector → {top_source_id}"
+        request_type = top_plan_type if is_meaningful(top_plan_type) else "выбор источника"
+        processing_label = "Маршрут выбран"
+        processing_badge = top_source_id
+        processing_tone = "ok"
+        main_target = top_analyzer_id if is_meaningful(top_analyzer_id) else top_source_id
+        reason = "Source Selector выбрал route-card"
+        fix_hint = "Если выбран неверный маршрут — править карточки Source Selector."
+    elif fp_matched:
+        status_class = "ok"
+        status_title = "Запрос частично понятен"
+        route_label = "FastPath"
+        request_type = fp_intent
+        processing_label = "FastPath"
+        processing_badge = fp_mode
+        processing_tone = "ok"
+        main_target = entity_ids.split(",")[0].strip() if is_meaningful(entity_ids) else object_text
+        reason = f"FastPath нашёл цель: {match_reasons}"
+        fix_hint = "Если цель неверная — править aliases / object_aliases / room mapping."
+    elif is_meaningful(top_source_id):
+        status_class = "warning"
+        status_title = "Запрос неоднозначный, обработан через Source Selector"
+        route_label = f"Source Selector → {top_source_id}"
+        request_type = top_plan_type if is_meaningful(top_plan_type) else "выбор источника"
+        processing_label = "Выбран источник"
+        processing_badge = top_source_id
+        processing_tone = "warning"
+        main_target = top_analyzer_id if is_meaningful(top_analyzer_id) else top_source_id
+        reason = "FastPath не принял запрос, Source Selector предложил ближайшую карточку"
+        fix_hint = "Если карточка неверная — править positive/negative examples карточек Source Selector."
+    else:
+        status_class = "bad"
+        status_title = "Запрос не понятен"
+        route_label = "не определено"
+        request_type = "неизвестно"
+        processing_label = "Нет маршрута"
+        processing_badge = "ошибка"
+        processing_tone = "bad"
+        main_target = "—"
+        reason = "ни FastPath, ни Source Selector не дали уверенного маршрута"
+        fix_hint = "Проверь aliases / object_aliases, карточки Source Selector и примеры маршрутизации."
+
+    fastpath_step = route_step(
+        "Принят" if fp_matched else "Не принят",
+        "FastPath",
+        "Цель найдена" if fp_matched else "Цель не найдена",
+        match_reasons if fp_matched else route_reject_reason,
+        "ok" if fp_matched else "bad" if reason_question else "neutral",
+    )
+
+    action_step = route_step(
+        action_label,
+        "Действие",
+        action_text,
+        "read_only" if state_only else "prepared" if prepared else "preview",
+        action_tone,
+    )
+
+    source_step = route_step(
+        "Принят" if route_accepted else "Проверен",
+        "Source Selector",
+        f"Карточка: {top_source_id}" if is_meaningful(top_source_id) else "Карточка не выбрана",
+        str(top_score) if top_score is not None else top_plan_type,
+        "ok" if route_accepted else "warning" if is_meaningful(top_source_id) else "neutral",
+    )
+
+    processing_step = route_step(
+        processing_label,
+        "Обработка",
+        reason,
+        processing_badge,
+        processing_tone,
+    )
+
+    detail_cards = [
+        {
+            "title": "FastPath / target_resolver_v2",
+            "subtitle": "Разбор фразы и поиск цели",
+            "tone": "ok" if fp_matched else "neutral",
+            "rows": make_detail_rows(fastparse, {
+                "matched": "Цель найдена",
+                "intent": "Тип запроса",
+                "mode": "Режим",
+                "object_text": "Объект из фразы",
+                "match_reasons": "Причина совпадения",
+                "entity_ids": "Найденные entity_id",
+            }),
+        },
+        {
+            "title": "Действие / Action Executor",
+            "subtitle": "Проверка выполнения без реального вызова HA",
+            "tone": action_tone,
+            "rows": make_detail_rows(prepare, {
+                "intent": "Тип запроса",
+                "target": "Цель",
+                "state_only": "Только чтение",
+                "prepared": "Действие подготовлено",
+                "note": "Комментарий",
+            }),
+        },
+        {
+            "title": "Source Selector / route-card",
+            "subtitle": "Выбор карточки, источника или анализатора",
+            "tone": "ok" if route_accepted else "warning" if is_meaningful(top_source_id) else "neutral",
+            "rows": make_detail_rows(source, {
+                "top_source_id": "Главная карточка",
+                "top_route_id": "Маршрут",
+                "top_analyzer_id": "Анализатор",
+                "top_plan_type": "Тип плана",
+                "top_score": "Оценка",
+                "top_title": "Название",
+            }),
+        },
+        {
+            "title": "Planner / обработка",
+            "subtitle": "Планирование или причина, почему LLM Planner не нужен",
+            "tone": processing_tone,
+            "rows": [
+                {"label": "Используется", "value": "да" if route_label == "Planner" else "нет"},
+                {"label": "Обработка", "value": processing_label},
+                {"label": "Причина", "value": "маршрут выбран Source Selector route-card" if route_accepted and route_label != "Planner" else reason},
+                {"label": "Комментарий", "value": "LLM Planner не запускался" if route_accepted and route_label != "Planner" else "будет выбран план анализа" if route_label == "Planner" else "не требуется"},
+            ],
+        },
+    ]
+
+    return {
+        "has_result": True,
+        "status_class": status_class,
+        "status_title": status_title,
+        "route": route_label,
+        "request_type": request_type,
+        "action": action_text,
+        "reason": reason,
+        "main_target": main_target,
+        "fix_hint": fix_hint,
+        "steps": [fastpath_step, action_step, source_step, processing_step],
+        "detail_cards": detail_cards,
+    }
+
+
 def regression_result_view(row: dict[str, Any]) -> dict[str, Any]:
     excerpt = row.get("response_excerpt") if isinstance(row.get("response_excerpt"), dict) else {}
     validated_plan = excerpt.get("validated_plan") if isinstance(excerpt.get("validated_plan"), dict) else {}
@@ -1199,6 +1482,10 @@ def build_regression_view(payload: dict[str, Any] | None, cases: dict[str, Any],
             or ""
         ),
         "fastpath_result": fastpath_result or fastpath_empty_result(),
+        "query_summary": build_query_summary(
+            fastpath_result or fastpath_empty_result(),
+            resolver_result or resolver_empty_result(),
+        ),
     }
 
 

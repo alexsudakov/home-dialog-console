@@ -25,6 +25,179 @@
       border-color: #7c9cff;
       box-shadow: 0 0 0 3px rgba(124, 156, 255, 0.18);
     }
+
+    .route-summary-card {
+      border: 1px solid #dbe7dd;
+      background: linear-gradient(180deg, #f4fff6 0%, #ffffff 100%);
+      border-radius: 18px;
+      padding: 18px;
+    }
+
+    .route-summary-card.warning {
+      border-color: #f2d38a;
+      background: linear-gradient(180deg, #fffaf0 0%, #ffffff 100%);
+    }
+
+    .route-summary-card.bad {
+      border-color: #f5b5b5;
+      background: linear-gradient(180deg, #fff5f5 0%, #ffffff 100%);
+    }
+
+    .route-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px 22px;
+      margin-top: 12px;
+    }
+
+    .route-summary-item span {
+      display: block;
+      color: #64748b;
+      font-size: 12px;
+      margin-bottom: 3px;
+    }
+
+    .route-summary-item strong {
+      color: #111827;
+      font-size: 14px;
+    }
+
+    .route-flow {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .route-step-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      padding: 14px;
+      background: #fff;
+    }
+
+    .route-step-card.ok {
+      border-color: #b8e5c0;
+      background: #f6fff7;
+    }
+
+    .route-step-card.warning {
+      border-color: #f1d08a;
+      background: #fffaf0;
+    }
+
+    .route-step-card.bad {
+      border-color: #f4b6b6;
+      background: #fff6f6;
+    }
+
+    .route-step-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .route-step-status {
+      font-size: 12px;
+      color: #475569;
+      margin-bottom: 5px;
+    }
+
+    .route-step-badge {
+      display: inline-block;
+      margin-top: 8px;
+      border-radius: 999px;
+      padding: 3px 8px;
+      background: #eef2ff;
+      color: #1d4ed8;
+      font-size: 12px;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+    }
+
+    .fix-card {
+      border: 1px solid #dbeafe;
+      background: #f8fbff;
+      border-radius: 16px;
+      padding: 14px 16px;
+      margin-top: 12px;
+    }
+
+    .details-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .detail-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .detail-card-header {
+      padding: 12px 14px;
+      border-bottom: 1px solid #eef2f7;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .detail-card-header strong {
+      font-size: 14px;
+    }
+
+    .detail-card-header span {
+      color: #64748b;
+      font-size: 12px;
+    }
+
+    .detail-card.ok .detail-card-header {
+      background: #f6fff7;
+    }
+
+    .detail-card.warning .detail-card-header {
+      background: #fffaf0;
+    }
+
+    .detail-card.bad .detail-card-header {
+      background: #fff6f6;
+    }
+
+    .detail-row {
+      display: grid;
+      grid-template-columns: 42% 58%;
+      gap: 8px;
+      padding: 8px 14px;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 12px;
+    }
+
+    .detail-row:last-child {
+      border-bottom: 0;
+    }
+
+    .detail-row span {
+      color: #64748b;
+    }
+
+    .detail-row strong {
+      overflow-wrap: anywhere;
+      font-weight: 600;
+    }
+
+    @media (max-width: 1100px) {
+      .route-flow,
+      .details-grid,
+      .route-summary-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
   </style>
 </head>
 <body>
@@ -144,85 +317,105 @@
         </details>
       </section>
 
-      {% if view.fastpath_result.get('fastparse_error') or view.fastpath_result.get('prepare_error') %}
+      {% if view.query_summary.get('has_result') %}
+      <section class="route-summary-card {{ view.query_summary.get('status_class') }}">
+        <div class="panel-header">
+          <h2>Итог маршрута</h2>
+          <span class="small-muted">{{ view.query_summary.get('status_title') }}</span>
+        </div>
+        <div class="route-summary-grid">
+          <div class="route-summary-item"><span>Куда пойдёт</span><strong>{{ view.query_summary.get('route') }}</strong></div>
+          <div class="route-summary-item"><span>Тип запроса</span><strong>{{ view.query_summary.get('request_type') }}</strong></div>
+          <div class="route-summary-item"><span>Действие</span><strong>{{ view.query_summary.get('action') }}</strong></div>
+          <div class="route-summary-item"><span>Главная сущность / анализатор</span><strong>{{ view.query_summary.get('main_target') }}</strong></div>
+          <div class="route-summary-item"><span>Почему</span><strong>{{ view.query_summary.get('reason') }}</strong></div>
+        </div>
+        <div class="fix-card">
+          <strong>Что делать дальше</strong>
+          <p class="muted">{{ view.query_summary.get('fix_hint') }}</p>
+        </div>
+      </section>
+
       <section class="panel">
         <div class="panel-header">
-          <h2>Ошибки FastPath-проверки</h2>
+          <h2>Путь запроса</h2>
+          <span class="small-muted">FastPath → Действие → Source Selector → Обработка</span>
+        </div>
+        <div class="route-flow">
+          {% for step in view.query_summary.get('steps') %}
+          <article class="route-step-card {{ step.tone }}">
+            <div class="route-step-title">
+              <strong>{{ loop.index }}. {{ step.title }}</strong>
+            </div>
+            <div class="route-step-status">{{ step.status }}</div>
+            <p class="muted">{{ step.subtitle }}</p>
+            <span class="route-step-badge">{{ step.badge }}</span>
+          </article>
+          {% endfor %}
+        </div>
+      </section>
+      {% endif %}
+
+      {% if view.fastpath_result.get('fastparse_error') or view.fastpath_result.get('prepare_error') or view.resolver_result.get('route_error') or view.resolver_result.get('source_error') %}
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Ошибки проверки</h2>
           <span class="small-muted">transport</span>
         </div>
         {% if view.fastpath_result.get('fastparse_error') %}
-        <p class="empty">fastparse-v2: {{ view.fastpath_result.get('fastparse_error') }}</p>
+        <p class="empty">FastPath: {{ view.fastpath_result.get('fastparse_error') }}</p>
         {% endif %}
         {% if view.fastpath_result.get('prepare_error') %}
-        <p class="empty">action-executor-prepare: {{ view.fastpath_result.get('prepare_error') }}</p>
+        <p class="empty">Действие: {{ view.fastpath_result.get('prepare_error') }}</p>
+        {% endif %}
+        {% if view.resolver_result.get('route_error') %}
+        <p class="empty">Route-card: {{ view.resolver_result.get('route_error') }}</p>
+        {% endif %}
+        {% if view.resolver_result.get('source_error') %}
+        <p class="empty">Source Selector: {{ view.resolver_result.get('source_error') }}</p>
         {% endif %}
       </section>
       {% endif %}
 
-      {% if view.fastpath_result.get('has_result') %}
-      <section class="dashboard-grid">
-        <article class="panel">
-          <div class="panel-header">
-            <h2>FastPath / target_resolver_v2</h2>
-            <span class="small-muted">/debug/fastparse-v2</span>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <tbody>
-                <tr><td>ok</td><td>{{ view.fastpath_result.get('fastparse').get('ok') }}</td></tr>
-                <tr><td>stage</td><td>{{ view.fastpath_result.get('fastparse').get('stage') }}</td></tr>
-                <tr><td>mode</td><td>{{ view.fastpath_result.get('fastparse').get('mode') }}</td></tr>
-                <tr><td>intent</td><td>{{ view.fastpath_result.get('fastparse').get('intent') }}</td></tr>
-                <tr><td>matched</td><td>{{ view.fastpath_result.get('fastparse').get('matched') }}</td></tr>
-                <tr><td>metric</td><td>{{ view.fastpath_result.get('fastparse').get('metric') }}</td></tr>
-                <tr><td>scope</td><td>{{ view.fastpath_result.get('fastparse').get('scope') }}</td></tr>
-                <tr><td>object_text</td><td>{{ view.fastpath_result.get('fastparse').get('object_text') }}</td></tr>
-                <tr><td>room</td><td>{{ view.fastpath_result.get('fastparse').get('room') }}</td></tr>
-                <tr><td>match_reasons</td><td>{{ view.fastpath_result.get('fastparse').get('match_reasons') }}</td></tr>
-                <tr><td>entity_ids</td><td>{{ view.fastpath_result.get('fastparse').get('entity_ids') }}</td></tr>
-                <tr><td>HTTP</td><td>{{ view.fastpath_result.get('fastparse').get('status_code') }} · {{ view.fastpath_result.get('fastparse').get('elapsed_ms') }} мс</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </article>
-
-        <article class="panel">
-          <div class="panel-header">
-            <h2>Action Executor prepare</h2>
-            <span class="small-muted">/debug/fastpath/action-executor-prepare</span>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <tbody>
-                <tr><td>ok</td><td>{{ view.fastpath_result.get('prepare').get('ok') }}</td></tr>
-                <tr><td>stage</td><td>{{ view.fastpath_result.get('prepare').get('stage') }}</td></tr>
-                <tr><td>intent</td><td>{{ view.fastpath_result.get('prepare').get('intent') }}</td></tr>
-                <tr><td>target</td><td>{{ view.fastpath_result.get('prepare').get('target') }}</td></tr>
-                <tr><td>prepared</td><td>{{ view.fastpath_result.get('prepare').get('prepared') }}</td></tr>
-                <tr><td>state_only</td><td>{{ view.fastpath_result.get('prepare').get('state_only') }}</td></tr>
-                <tr><td>note</td><td>{{ view.fastpath_result.get('prepare').get('note') }}</td></tr>
-                <tr><td>HTTP</td><td>{{ view.fastpath_result.get('prepare').get('status_code') }} · {{ view.fastpath_result.get('prepare').get('elapsed_ms') }} мс</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </article>
-      </section>
-
+      {% if view.query_summary.get('has_result') %}
       <section class="panel">
         <div class="panel-header">
-          <h2>Найденные сущности FastPath</h2>
-          <span class="small-muted">semantic results</span>
+          <h2>Детали</h2>
+          <span class="small-muted">техническая информация</span>
         </div>
-        {% if view.fastpath_result.get('entities') %}
+        <div class="details-grid">
+          {% for card in view.query_summary.get('detail_cards') %}
+          <article class="detail-card {{ card.tone }}">
+            <div class="detail-card-header">
+              <strong>{{ card.title }}</strong>
+              <span>{{ card.subtitle }}</span>
+            </div>
+            {% for row in card.rows %}
+            <div class="detail-row">
+              <span>{{ row.label }}</span>
+              <strong>{{ row.value }}</strong>
+            </div>
+            {% endfor %}
+          </article>
+          {% endfor %}
+        </div>
+      </section>
+
+      {% if view.fastpath_result.get('entities') %}
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Найденные сущности</h2>
+          <span class="small-muted">FastPath semantic results</span>
+        </div>
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
                 <th>entity_id</th>
-                <th>friendly_name</th>
-                <th>area</th>
-                <th>state</th>
-                <th>label</th>
+                <th>Название</th>
+                <th>Комната</th>
+                <th>Состояние</th>
+                <th>Метка</th>
               </tr>
             </thead>
             <tbody>
@@ -238,96 +431,26 @@
             </tbody>
           </table>
         </div>
-        {% else %}
-        <p class="empty">Сущности не найдены.</p>
-        {% endif %}
-      </section>
-
-      <details class="raw-details">
-        <summary>Raw FastPath JSON</summary>
-        <pre>{{ view.fastpath_result.get('raw') | tojson(indent=2) }}</pre>
-      </details>
-      {% endif %}
-
-      {% if view.resolver_result.get('route_error') or view.resolver_result.get('source_error') %}
-      <section class="panel">
-        <div class="panel-header">
-          <h2>Ошибки проверки маршрута</h2>
-          <span class="small-muted">transport</span>
-        </div>
-        {% if view.resolver_result.get('route_error') %}
-        <p class="empty">route-shortcut: {{ view.resolver_result.get('route_error') }}</p>
-        {% endif %}
-        {% if view.resolver_result.get('source_error') %}
-        <p class="empty">source/select: {{ view.resolver_result.get('source_error') }}</p>
-        {% endif %}
       </section>
       {% endif %}
 
-      {% if view.resolver_result.get('has_result') %}
-      <section class="dashboard-grid">
-        <article class="panel">
-          <div class="panel-header">
-            <h2>Route shortcut</h2>
-            <span class="small-muted">/debug/planner/route-shortcut</span>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <tbody>
-                <tr><td>accepted</td><td>{{ view.resolver_result.get('route').get('accepted') }}</td></tr>
-                <tr><td>reject_reason</td><td>{{ view.resolver_result.get('route').get('reject_reason') }}</td></tr>
-                <tr><td>source_id</td><td>{{ view.resolver_result.get('route').get('source_id') }}</td></tr>
-                <tr><td>route_id</td><td>{{ view.resolver_result.get('route').get('route_id') }}</td></tr>
-                <tr><td>analyzer_id</td><td>{{ view.resolver_result.get('route').get('analyzer_id') }}</td></tr>
-                <tr><td>plan_type</td><td>{{ view.resolver_result.get('route').get('plan_type') }}</td></tr>
-                <tr><td>best_positive_score</td><td>{{ view.resolver_result.get('route').get('best_positive_score') }}</td></tr>
-                <tr><td>candidate_score</td><td>{{ view.resolver_result.get('route').get('candidate_score') }}</td></tr>
-                <tr><td>HTTP</td><td>{{ view.resolver_result.get('route').get('status_code') }} · {{ view.resolver_result.get('route').get('elapsed_ms') }} мс</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </article>
-
-        <article class="panel">
-          <div class="panel-header">
-            <h2>Source select</h2>
-            <span class="small-muted">/debug/source/select</span>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <tbody>
-                <tr><td>top source_id</td><td>{{ view.resolver_result.get('source').get('top_source_id') }}</td></tr>
-                <tr><td>top card_kind</td><td>{{ view.resolver_result.get('source').get('top_card_kind') }}</td></tr>
-                <tr><td>top route_id</td><td>{{ view.resolver_result.get('source').get('top_route_id') }}</td></tr>
-                <tr><td>top analyzer_id</td><td>{{ view.resolver_result.get('source').get('top_analyzer_id') }}</td></tr>
-                <tr><td>top plan_type</td><td>{{ view.resolver_result.get('source').get('top_plan_type') }}</td></tr>
-                <tr><td>top score</td><td>{{ view.resolver_result.get('source').get('top_score') }}</td></tr>
-                <tr><td>top title</td><td>{{ view.resolver_result.get('source').get('top_title') }}</td></tr>
-                <tr><td>collection</td><td>{{ view.resolver_result.get('source').get('collection') }}</td></tr>
-                <tr><td>model</td><td>{{ view.resolver_result.get('source').get('model') }}</td></tr>
-                <tr><td>HTTP</td><td>{{ view.resolver_result.get('source').get('status_code') }} · {{ view.resolver_result.get('source').get('elapsed_ms') }} мс</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </article>
-      </section>
-
+      {% if view.resolver_result.get('source_candidates') %}
       <section class="panel">
         <div class="panel-header">
           <h2>Кандидаты Source Selector</h2>
-          <span class="small-muted">top 5</span>
+          <span class="small-muted">ближайшие карточки</span>
         </div>
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>source_id</th>
-                <th>kind</th>
-                <th>route</th>
-                <th>analyzer</th>
-                <th>plan</th>
-                <th>score</th>
-                <th>title</th>
+                <th>Карточка</th>
+                <th>Тип</th>
+                <th>Маршрут</th>
+                <th>Анализатор</th>
+                <th>План</th>
+                <th>Оценка</th>
+                <th>Название</th>
               </tr>
             </thead>
             <tbody>
@@ -346,9 +469,13 @@
           </table>
         </div>
       </section>
+      {% endif %}
 
       <details class="raw-details">
-        <summary>Raw resolver JSON</summary>
+        <summary>Raw JSON</summary>
+        <h3>FastPath</h3>
+        <pre>{{ view.fastpath_result.get('raw') | tojson(indent=2) }}</pre>
+        <h3>Source Selector</h3>
         <pre>{{ view.resolver_result.get('raw') | tojson(indent=2) }}</pre>
       </details>
       {% endif %}
