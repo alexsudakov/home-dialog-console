@@ -334,7 +334,7 @@
 
         <div class="example-buttons" aria-label="Примеры запросов">
           {% for example in view.query_check_examples %}
-          <button class="example-button" type="button" onclick="runQueryExample({{ example | tojson }})">{{ example }}</button>
+          <button class="example-button" type="button" data-question="{{ example | e }}" onclick="runQueryExample(this.dataset.question)">{{ example }}</button>
           {% endfor %}
         </div>
 
