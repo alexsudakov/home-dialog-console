@@ -14,11 +14,11 @@ from typing import Any
 
 import httpx
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.47"
+APP_VERSION = "0.1.48"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 DEFAULT_RETRIEVAL_SERVICE_URL = "http://192.168.1.138:8085"
@@ -1650,6 +1650,7 @@ async def build_prompts_view(prompt_id: str | None = None) -> dict[str, Any]:
 
     selected_prompt = None
     selected_error = ""
+    prompt_diff = None
 
     if prompt_id:
         detail_ok, detail_status, detail_elapsed_ms, detail_payload, detail_error = await get_json(
@@ -1667,6 +1668,30 @@ async def build_prompts_view(prompt_id: str | None = None) -> dict[str, Any]:
             }
         if not selected_prompt:
             selected_error = detail_error or detail_data.get("detail") or f"HTTP {detail_status}"
+        else:
+            diff_ok, diff_status, diff_elapsed_ms, diff_payload, diff_error = await get_json(
+                f"{dialog_service_url}/admin/prompts/{prompt_id}/diff",
+                timeout=20.0,
+            )
+            diff_data = diff_payload if isinstance(diff_payload, dict) else {}
+            if diff_data.get("ok"):
+                prompt_diff = {
+                    **diff_data,
+                    "status_code": diff_status,
+                    "elapsed_ms": diff_elapsed_ms,
+                }
+            elif diff_data.get("detail") == "prompt_not_editable":
+                prompt_diff = {
+                    "ok": False,
+                    "editable": False,
+                    "detail": "prompt_not_editable",
+                }
+            else:
+                prompt_diff = {
+                    "ok": False,
+                    "editable": False,
+                    "detail": diff_error or diff_data.get("detail") or f"HTTP {diff_status}",
+                }
 
     return {
         "nav_items": nav_items("prompts"),
@@ -1682,6 +1707,7 @@ async def build_prompts_view(prompt_id: str | None = None) -> dict[str, Any]:
         "summary_tiles": prompts_group_tiles(data.get("groups") or {}, total),
         "selected_prompt": selected_prompt,
         "selected_error": selected_error,
+        "prompt_diff": prompt_diff,
         "raw": data,
     }
 
@@ -1697,6 +1723,44 @@ async def prompts_page(request: Request) -> HTMLResponse:
 async def prompt_detail_page(request: Request, prompt_id: str) -> HTMLResponse:
     view = await build_prompts_view(prompt_id=prompt_id)
     return templates.TemplateResponse(request, "prompts.html", {"view": view, "options": public_options(load_options()), "hdc_version": APP_VERSION})
+
+
+
+@app.get("/prompts/{prompt_id}/diff", response_class=HTMLResponse)
+async def prompt_diff_page(request: Request, prompt_id: str) -> HTMLResponse:
+    view = await build_prompts_view(prompt_id=prompt_id)
+    return templates.TemplateResponse(request, "prompts.html", {"view": view, "options": public_options(load_options()), "hdc_version": APP_VERSION})
+
+
+@app.post("/prompts/{prompt_id}/draft")
+async def prompt_save_draft_page(request: Request, prompt_id: str) -> RedirectResponse:
+    form = await request.form()
+    content = str(form.get("content") or "")
+
+    options = load_options()
+    dialog_service_url = str(options["dialog_service_url"]).rstrip("/")
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        await client.post(
+            f"{dialog_service_url}/admin/prompts/{prompt_id}/draft",
+            json={"content": content},
+        )
+
+    return RedirectResponse(url=f"/prompts/{prompt_id}/diff", status_code=303)
+
+
+@app.post("/prompts/{prompt_id}/draft/reset")
+async def prompt_reset_draft_page(request: Request, prompt_id: str) -> RedirectResponse:
+    options = load_options()
+    dialog_service_url = str(options["dialog_service_url"]).rstrip("/")
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        await client.request(
+            "DELETE",
+            f"{dialog_service_url}/admin/prompts/{prompt_id}/draft",
+        )
+
+    return RedirectResponse(url=f"/prompts/{prompt_id}", status_code=303)
 
 
 

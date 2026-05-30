@@ -77,6 +77,54 @@
         grid-template-columns: 1fr;
       }
     }
+
+    .prompt-editor {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .prompt-editor textarea {
+      width: 100%;
+      min-height: 360px;
+      border: 1px solid #cbd5e1;
+      border-radius: 14px;
+      padding: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      line-height: 1.45;
+      resize: vertical;
+      background: #f8fafc;
+      color: #0f172a;
+    }
+
+    .diff-content {
+      background: #0f172a;
+      color: #e5e7eb;
+      border-radius: 16px;
+      padding: 14px;
+      overflow: auto;
+      white-space: pre-wrap;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      line-height: 1.45;
+      max-height: 420px;
+    }
+
+    .danger-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #fecaca;
+      background: #fff1f2;
+      color: #be123c;
+      border-radius: 12px;
+      padding: 8px 12px;
+      font: inherit;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
   </style>
 </head>
 <body>
@@ -189,6 +237,54 @@
                 <div><dt>SHA256</dt><dd>{{ view.selected_prompt.sha256 }}</dd></div>
               </dl>
               <pre class="prompt-content">{{ view.selected_prompt.content }}</pre>
+
+              {% if view.prompt_diff and view.prompt_diff.get('editable') %}
+              <section class="panel">
+                <div class="panel-header">
+                  <h2>Черновик</h2>
+                  <span class="small-muted">
+                    {% if view.prompt_diff.get('has_draft') %}
+                    есть черновик, рабочий prompt-файл не изменён
+                    {% else %}
+                    черновик пока совпадает с активным промтом
+                    {% endif %}
+                  </span>
+                </div>
+
+                <p class="muted">
+                  Это безопасный режим: черновик сохраняется отдельно и не меняет активный prompt-файл.
+                  Применение в рабочий файл будет добавлено отдельным шагом.
+                </p>
+
+                <form class="prompt-editor" method="post" action="/prompts/{{ view.selected_prompt.id }}/draft">
+                  <textarea name="content">{{ view.prompt_diff.get('draft_content') }}</textarea>
+                  <div class="prompt-actions">
+                    <button class="refresh" type="submit">Сохранить черновик</button>
+                    <a class="refresh" href="/prompts/{{ view.selected_prompt.id }}/diff">Показать diff</a>
+                  </div>
+                </form>
+
+                {% if view.prompt_diff.get('has_draft') %}
+                <form method="post" action="/prompts/{{ view.selected_prompt.id }}/draft/reset" style="margin-top: 10px;">
+                  <button class="danger-button" type="submit">Сбросить черновик</button>
+                </form>
+                {% endif %}
+
+                <dl class="info-list">
+                  <div><dt>Активный файл</dt><dd>{{ view.prompt_diff.get('active_chars') }} символов · {{ view.prompt_diff.get('active_lines') }} строк</dd></div>
+                  <div><dt>Черновик</dt><dd>{{ view.prompt_diff.get('draft_chars') }} символов · {{ view.prompt_diff.get('draft_lines') }} строк</dd></div>
+                </dl>
+
+                {% if view.prompt_diff.get('diff') %}
+                <h3>Diff</h3>
+                <pre class="diff-content">{{ view.prompt_diff.get('diff') }}</pre>
+                {% else %}
+                <p class="empty">Отличий между активным промтом и черновиком нет.</p>
+                {% endif %}
+              </section>
+              {% elif view.prompt_diff and view.prompt_diff.get('detail') == 'prompt_not_editable' %}
+              <p class="empty">Этот файл пока доступен только для просмотра. Редактирование включено только для planner_system.md и slowpath_system.md.</p>
+              {% endif %}
             {% else %}
               <p class="empty">Выберите промт из списка слева.</p>
             {% endif %}
