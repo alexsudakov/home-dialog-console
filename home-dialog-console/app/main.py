@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.41"
+APP_VERSION = "0.1.42"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 DEFAULT_RETRIEVAL_SERVICE_URL = "http://192.168.1.138:8085"
@@ -1187,6 +1187,32 @@ def route_step(status: str, title: str, subtitle: str, badge: str, tone: str = "
     }
 
 
+
+def pick_primary_entity(entity_ids_text: str, fallback: str = "—") -> str:
+    ids = [item.strip() for item in str(entity_ids_text or "").split(",") if item.strip() and item.strip() != "—"]
+    if not ids:
+        return fallback
+
+    domain_priority = {
+        "light": 10,
+        "switch": 20,
+        "fan": 30,
+        "cover": 40,
+        "climate": 50,
+        "media_player": 60,
+        "lock": 70,
+        "sensor": 80,
+        "binary_sensor": 90,
+    }
+
+    def score(entity_id: str) -> tuple[int, str]:
+        domain = entity_id.split(".", 1)[0] if "." in entity_id else ""
+        return (domain_priority.get(domain, 999), entity_id)
+
+    return sorted(ids, key=score)[0]
+
+
+
 def build_query_summary(fastpath_result: dict[str, Any], resolver_result: dict[str, Any]) -> dict[str, Any]:
     if not fastpath_result.get("has_result") and not resolver_result.get("has_result"):
         return {
@@ -1283,7 +1309,7 @@ def build_query_summary(fastpath_result: dict[str, Any], resolver_result: dict[s
         processing_label = "Ответ по состоянию"
         processing_badge = "state_query"
         processing_tone = "neutral"
-        main_target = entity_ids.split(",")[0].strip() if is_meaningful(entity_ids) else object_text
+        main_target = pick_primary_entity(entity_ids, object_text)
         reason = f"найдено совпадение: {match_reasons}"
         fix_hint = "Маршрут выглядит правильно. Можно добавить эту фразу в regression-набор."
     elif route_accepted:
@@ -1305,7 +1331,7 @@ def build_query_summary(fastpath_result: dict[str, Any], resolver_result: dict[s
         processing_label = "FastPath"
         processing_badge = fp_mode
         processing_tone = "ok"
-        main_target = entity_ids.split(",")[0].strip() if is_meaningful(entity_ids) else object_text
+        main_target = pick_primary_entity(entity_ids, object_text)
         reason = f"FastPath нашёл цель: {match_reasons}"
         fix_hint = "Если цель неверная — править aliases / object_aliases / room mapping."
     elif is_meaningful(top_source_id):
