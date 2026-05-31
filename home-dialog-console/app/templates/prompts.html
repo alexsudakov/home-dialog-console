@@ -139,7 +139,7 @@
       </div>
       <nav class="nav">
         {% for item in view.nav_items %}
-        <a class="nav-item {{ 'active' if item.active else '' }} {{ 'disabled' if item.get('disabled') else '' }}" href="{{ item.href }}">{{ item.title }}</a>
+        <a class="nav-item {{ 'active' if item.active else '' }} {{ 'disabled' if item.get('disabled') else '' }}" href="#" onclick="return hdcGo('{{ item.href }}')">{{ item.title }}</a>
         {% endfor %}
       </nav>
       <div class="sidebar-footer">

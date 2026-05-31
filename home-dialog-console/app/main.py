@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.51"
+APP_VERSION = "0.1.52"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 DEFAULT_RETRIEVAL_SERVICE_URL = "http://192.168.1.138:8085"
@@ -69,11 +69,11 @@ def is_protected_source_card(source_id: str, source: dict[str, Any] | None = Non
 def nav_items(active: str = "overview") -> list[dict[str, Any]]:
     return [
         {"id": "overview", "title": "Обзор", "href": ".", "active": active == "overview", "disabled": False},
-        {"id": "regression", "title": "Тесты", "href": "/regression", "active": active == "regression", "disabled": False},
+        {"id": "regression", "title": "Тесты", "href": "regression", "active": active == "regression", "disabled": False},
         {"id": "environment", "title": "Окружение", "href": "environment", "active": active == "environment", "disabled": False},
-        {"id": "config", "title": "Конфиг", "href": "/config", "active": active == "config", "disabled": False},
-        {"id": "qdrant", "title": "Qdrant", "href": "/qdrant", "active": active == "qdrant", "disabled": False},
-        {"id": "prompts", "title": "Промты", "href": "/prompts", "active": active == "prompts", "disabled": False},
+        {"id": "config", "title": "Конфиг", "href": "config", "active": active == "config", "disabled": False},
+        {"id": "qdrant", "title": "Qdrant", "href": "qdrant", "active": active == "qdrant", "disabled": False},
+        {"id": "prompts", "title": "Промты", "href": "prompts", "active": active == "prompts", "disabled": False},
         {"id": "analyzers", "title": "Анализаторы", "href": "#analyzers", "active": active == "analyzers", "disabled": True},
         {"id": "actions", "title": "Действия", "href": "#actions", "active": active == "actions", "disabled": True},
         {"id": "objects", "title": "Объекты", "href": "#objects", "active": active == "objects", "disabled": True},
