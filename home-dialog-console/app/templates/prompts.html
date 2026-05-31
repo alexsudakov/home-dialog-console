@@ -206,7 +206,7 @@
                 <div class="prompt-preview">{{ item.preview }}</div>
                 {% endif %}
                 <div class="prompt-actions">
-                  <a class="refresh" href="/prompts/{{ item.id }}">Открыть</a>
+                  <a class="refresh" href="#" data-prompt-id="{{ item.id }}" onclick="openPromptById(this.dataset.promptId); return false;">Открыть</a>
                 </div>
               </article>
               {% endfor %}
@@ -256,16 +256,16 @@
                   Применение в рабочий файл будет добавлено отдельным шагом.
                 </p>
 
-                <form class="prompt-editor" method="post" action="/prompts/{{ view.selected_prompt.id }}/draft">
+                <form class="prompt-editor" method="post" action="#" data-prompt-id="{{ view.selected_prompt.id }}" onsubmit="return preparePromptForm(this, this.dataset.promptId, '/draft')">
                   <textarea name="content">{{ view.prompt_diff.get('draft_content') }}</textarea>
                   <div class="prompt-actions">
                     <button class="refresh" type="submit">Сохранить черновик</button>
-                    <a class="refresh" href="/prompts/{{ view.selected_prompt.id }}/diff">Показать diff</a>
+                    <a class="refresh" href="#" data-prompt-id="{{ view.selected_prompt.id }}" onclick="openPromptDiff(this.dataset.promptId); return false;">Показать diff</a>
                   </div>
                 </form>
 
                 {% if view.prompt_diff.get('has_draft') %}
-                <form method="post" action="/prompts/{{ view.selected_prompt.id }}/draft/reset" style="margin-top: 10px;">
+                <form method="post" action="#" data-prompt-id="{{ view.selected_prompt.id }}" onsubmit="return preparePromptForm(this, this.dataset.promptId, '/draft/reset')" style="margin-top: 10px;">
                   <button class="danger-button" type="submit">Сбросить черновик</button>
                 </form>
                 {% endif %}
@@ -298,5 +298,35 @@
       </section>
     </main>
   </div>
+
+  <script>
+    function hdcBasePath() {
+      const path = window.location.pathname;
+      const marker = "/prompts";
+      const idx = path.indexOf(marker);
+      if (idx >= 0) {
+        return path.slice(0, idx);
+      }
+      return "";
+    }
+
+    function hdcPromptUrl(id, suffix) {
+      return hdcBasePath() + "/prompts/" + encodeURIComponent(id) + (suffix || "");
+    }
+
+    function openPromptById(id) {
+      window.location.href = hdcPromptUrl(id, "");
+    }
+
+    function openPromptDiff(id) {
+      window.location.href = hdcPromptUrl(id, "/diff");
+    }
+
+    function preparePromptForm(form, id, suffix) {
+      form.action = hdcPromptUrl(id, suffix || "");
+      return true;
+    }
+  </script>
+
 </body>
 </html>
