@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-APP_VERSION = "0.1.53"
+APP_VERSION = "0.1.54"
 CONFIG_PATH = Path("/data/options.json")
 DEFAULT_DIALOG_SERVICE_URL = "http://127.0.0.1:8090"
 DEFAULT_RETRIEVAL_SERVICE_URL = "http://192.168.1.138:8085"
@@ -1651,6 +1651,8 @@ async def build_prompts_view(prompt_id: str | None = None) -> dict[str, Any]:
     selected_prompt = None
     selected_error = ""
     prompt_diff = None
+    prompt_backups = []
+    prompt_audit = []
 
     if prompt_id:
         detail_ok, detail_status, detail_elapsed_ms, detail_payload, detail_error = await get_json(
@@ -1693,6 +1695,26 @@ async def build_prompts_view(prompt_id: str | None = None) -> dict[str, Any]:
                     "detail": diff_error or diff_data.get("detail") or f"HTTP {diff_status}",
                 }
 
+            backups_ok, backups_status, backups_elapsed_ms, backups_payload, backups_error = await get_json(
+                f"{dialog_service_url}/admin/prompts/{prompt_id}/backups",
+                timeout=20.0,
+            )
+            backups_data = backups_payload if isinstance(backups_payload, dict) else {}
+            if backups_data.get("ok") and isinstance(backups_data.get("items"), list):
+                prompt_backups = backups_data.get("items") or []
+
+            audit_ok, audit_status, audit_elapsed_ms, audit_payload, audit_error = await get_json(
+                f"{dialog_service_url}/admin/prompt-audit?limit=20",
+                timeout=20.0,
+            )
+            audit_data = audit_payload if isinstance(audit_payload, dict) else {}
+            if audit_data.get("ok") and isinstance(audit_data.get("items"), list):
+                selected_rel = selected_prompt.get("relative_path") if selected_prompt else None
+                prompt_audit = [
+                    item for item in (audit_data.get("items") or [])
+                    if isinstance(item, dict) and item.get("relative_path") == selected_rel
+                ]
+
     return {
         "nav_items": nav_items("prompts"),
         "updated_at": format_time(datetime.now(timezone.utc).isoformat()),
@@ -1708,6 +1730,8 @@ async def build_prompts_view(prompt_id: str | None = None) -> dict[str, Any]:
         "selected_prompt": selected_prompt,
         "selected_error": selected_error,
         "prompt_diff": prompt_diff,
+        "prompt_backups": prompt_backups,
+        "prompt_audit": prompt_audit,
         "raw": data,
     }
 
@@ -1762,6 +1786,29 @@ async def prompt_reset_draft_page(request: Request, prompt_id: str) -> RedirectR
         )
 
     return RedirectResponse(url=f"/prompts/{prompt_id}", status_code=303)
+
+
+
+@app.post("/prompts/{prompt_id}/apply")
+async def prompt_apply_draft_page(request: Request, prompt_id: str) -> RedirectResponse:
+    options = load_options()
+    dialog_service_url = str(options["dialog_service_url"]).rstrip("/")
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        await client.post(f"{dialog_service_url}/admin/prompts/{prompt_id}/apply")
+
+    return RedirectResponse(url=f"/prompts/{prompt_id}/diff", status_code=303)
+
+
+@app.post("/prompts/{prompt_id}/rollback/{backup_id}")
+async def prompt_rollback_page(request: Request, prompt_id: str, backup_id: str) -> RedirectResponse:
+    options = load_options()
+    dialog_service_url = str(options["dialog_service_url"]).rstrip("/")
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        await client.post(f"{dialog_service_url}/admin/prompts/{prompt_id}/rollback/{backup_id}")
+
+    return RedirectResponse(url=f"/prompts/{prompt_id}/diff", status_code=303)
 
 
 

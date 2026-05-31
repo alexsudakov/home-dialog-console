@@ -125,6 +125,36 @@
       cursor: pointer;
     }
 
+
+    .apply-warning {
+      border: 1px solid #fed7aa;
+      background: #fff7ed;
+      color: #9a3412;
+      border-radius: 14px;
+      padding: 12px;
+      margin: 12px 0;
+    }
+
+    .backup-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      padding: 12px;
+      margin: 10px 0;
+      background: #ffffff;
+    }
+
+    .audit-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .audit-item {
+      border-left: 3px solid #cbd5e1;
+      padding-left: 10px;
+      color: #475569;
+      font-size: 13px;
+    }
+
   </style>
 </head>
 <body>
@@ -265,9 +295,19 @@
                 </form>
 
                 {% if view.prompt_diff.get('has_draft') %}
-                <form method="post" action="#" data-prompt-id="{{ view.selected_prompt.id }}" onsubmit="return preparePromptForm(this, this.dataset.promptId, '/draft/reset')" style="margin-top: 10px;">
-                  <button class="danger-button" type="submit">Сбросить черновик</button>
-                </form>
+                <div class="prompt-actions">
+                  <form method="post" action="#" data-prompt-id="{{ view.selected_prompt.id }}" onsubmit="return preparePromptForm(this, this.dataset.promptId, '/apply')">
+                    <button class="danger-button" type="submit">Применить черновик</button>
+                  </form>
+
+                  <form method="post" action="#" data-prompt-id="{{ view.selected_prompt.id }}" onsubmit="return preparePromptForm(this, this.dataset.promptId, '/draft/reset')">
+                    <button class="refresh" type="submit">Сбросить черновик</button>
+                  </form>
+                </div>
+
+                <div class="apply-warning">
+                  После применения нужно перезапустить или перезагрузить dialog-service, чтобы все части сервиса гарантированно использовали новый prompt.
+                </div>
                 {% endif %}
 
                 <dl class="info-list">
@@ -284,6 +324,50 @@
               </section>
               {% elif view.prompt_diff and view.prompt_diff.get('detail') == 'prompt_not_editable' %}
               <p class="empty">Этот файл пока доступен только для просмотра. Редактирование включено только для planner_system.md и slowpath_system.md.</p>
+              {% endif %}
+
+              {% if view.prompt_backups %}
+              <section class="panel">
+                <div class="panel-header">
+                  <h2>Backups / откат</h2>
+                  <span class="small-muted">{{ view.prompt_backups|length }} backup</span>
+                </div>
+
+                <p class="muted">Перед каждым применением или откатом active-файл сохраняется в backup.</p>
+
+                {% for backup in view.prompt_backups %}
+                <article class="backup-card">
+                  <strong>{{ backup.backup_id }}</strong>
+                  <dl class="info-list">
+                    <div><dt>Размер</dt><dd>{{ backup.size_bytes }} байт · {{ backup.line_count }} строк</dd></div>
+                    <div><dt>Изменён</dt><dd>{{ backup.mtime }}</dd></div>
+                    <div><dt>SHA256</dt><dd>{{ backup.sha256 }}</dd></div>
+                  </dl>
+                  <form method="post" action="#" data-prompt-id="{{ view.selected_prompt.id }}" data-backup-id="{{ backup.backup_id }}" onsubmit="return prepareRollbackForm(this)">
+                    <button class="danger-button" type="submit">Откатить к этому backup</button>
+                  </form>
+                </article>
+                {% endfor %}
+              </section>
+              {% endif %}
+
+              {% if view.prompt_audit %}
+              <section class="panel">
+                <div class="panel-header">
+                  <h2>История изменений</h2>
+                  <span class="small-muted">{{ view.prompt_audit|length }} событий</span>
+                </div>
+                <div class="audit-list">
+                  {% for item in view.prompt_audit %}
+                  <div class="audit-item">
+                    <strong>{{ item.event }}</strong> · {{ item.ts }} · restart_required={{ item.restart_required }}
+                    {% if item.backup_id %}<br>backup: {{ item.backup_id }}{% endif %}
+                    {% if item.rollback_backup_id %}<br>rollback backup: {{ item.rollback_backup_id }}{% endif %}
+                    {% if item.pre_rollback_backup_id %}<br>pre-rollback backup: {{ item.pre_rollback_backup_id }}{% endif %}
+                  </div>
+                  {% endfor %}
+                </div>
+              </section>
               {% endif %}
             {% else %}
               <p class="empty">Выберите промт из списка слева.</p>
@@ -324,6 +408,13 @@
 
     function preparePromptForm(form, id, suffix) {
       form.action = hdcPromptUrl(id, suffix || "");
+      return true;
+    }
+
+    function prepareRollbackForm(form) {
+      const id = form.dataset.promptId;
+      const backupId = form.dataset.backupId;
+      form.action = hdcPromptUrl(id, "/rollback/" + encodeURIComponent(backupId));
       return true;
     }
   </script>
