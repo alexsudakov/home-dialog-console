@@ -661,5 +661,32 @@
 })();
 </script>
 
+
+  <script>
+    if (typeof window.hdcBasePath !== "function") {
+      window.hdcBasePath = function() {
+        const path = window.location.pathname;
+        const markers = ["/prompts", "/regression", "/config", "/qdrant"];
+        for (const marker of markers) {
+          const idx = path.indexOf(marker);
+          if (idx >= 0) return path.slice(0, idx);
+        }
+        const ingress = "/api/hassio_ingress/";
+        if (path.startsWith(ingress)) {
+          const parts = path.split("/");
+          if (parts.length >= 4 && parts[3]) return "/api/hassio_ingress/" + parts[3];
+        }
+        return "";
+      };
+    }
+
+    window.hdcGo = function(path) {
+      const clean = (path || "").replace(/^\//, "");
+      const base = window.hdcBasePath();
+      window.location.href = base + "/" + clean;
+      return false;
+    };
+  </script>
+
 </body>
 </html>
